@@ -4,12 +4,20 @@ export const transactionService = {
   async createTransaction(cartItems, cashierId, paymentDetails = {}) {
     try {
       // Prepare items for the stored procedure
-      const itemsJson = cartItems.map(item => ({
-        product_id: item.id,
-        quantity: item.quantity,
-        price: item.selling_price,
-        discount: item.discount || 0
-      }))
+      // Include item-level discounts in the calculation
+      const itemsJson = cartItems.map(item => {
+        const itemSubtotal = item.selling_price * item.quantity
+        const itemDiscountAmount = item.discountType === 'percentage'
+          ? (itemSubtotal * item.discount / 100)
+          : item.discount
+          
+        return {
+          product_id: item.id,
+          quantity: item.quantity,
+          price: item.selling_price,
+          discount: itemDiscountAmount // Send calculated discount amount
+        }
+      })
 
       // Call the stored procedure
       const { data, error } = await supabase.rpc('process_transaction', {
