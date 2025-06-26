@@ -9,6 +9,7 @@ import Login from './pages/Login'
 import POS from './pages/POS'
 import Products from './pages/Products'
 import Dashboard from './pages/Dashboard'
+import Reports from './pages/Reports'
 
 function App() {
   return (
@@ -58,6 +59,12 @@ function App() {
             </ProtectedRoute>
           } />
           
+          <Route path="/reports" element={
+            <ProtectedRoute requireOwner>
+              <Reports />
+            </ProtectedRoute>
+          } />
+
           {/* Default Route */}
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Routes>
