@@ -71,12 +71,6 @@ export default function Login() {
             {loading ? 'Loading...' : 'Login'}
           </button>
         </form>
-        
-        <div className="mt-4 text-center text-sm text-gray-600">
-          <p>Demo Account:</p>
-          <p>Email: owner@tokolbj.com / kasir1@tokolbj.com</p>
-          <p>Password: 123456</p>
-        </div>
       </div>
     </div>
   )
