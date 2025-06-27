@@ -10,6 +10,9 @@ import POS from './pages/POS'
 import Products from './pages/Products'
 import Dashboard from './pages/Dashboard'
 import Reports from './pages/Reports'
+import Statistics from './pages/Statistics'
+import Employees from './pages/Employees'
+
 
 function App() {
   return (
@@ -62,6 +65,18 @@ function App() {
           <Route path="/reports" element={
             <ProtectedRoute requireOwner>
               <Reports />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/statistics" element={
+            <ProtectedRoute requireOwner>
+              <Statistics />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/employees" element={
+            <ProtectedRoute requireOwner>
+              <Employees />
             </ProtectedRoute>
           } />
 
