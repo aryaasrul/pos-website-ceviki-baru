@@ -1,158 +1,133 @@
-import React, { useState } from 'react'
-import { formatCurrency } from '../../utils/formatters'
-import toast from 'react-hot-toast'
+import React, { useState, useMemo } from 'react';
+import toast from 'react-hot-toast';
+import { formatCurrency } from '../../utils/formatters';
 
-export default function CheckoutModal({ cart, globalDiscount, globalDiscountType, onConfirm, onClose }) {
-  const [paymentMethod, setPaymentMethod] = useState('cash')
-  const [customerName, setCustomerName] = useState('')
-  const [customerPhone, setCustomerPhone] = useState('')
-  const [loading, setLoading] = useState(false)
+export default function CheckoutModal({ cart, globalDiscount, globalDiscountType, onClose, onConfirm }) {
+  // State untuk data pelanggan
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerAddress, setCustomerAddress] = useState(''); // State untuk alamat ditambahkan
+  const [notes, setNotes] = useState('');
 
-  // Calculate totals
-  const calculateTotals = () => {
-    let subtotal = 0
-    let totalItemDiscount = 0
+  // State untuk pembayaran
+  const [amountPaid, setAmountPaid] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [taxPercent, setTaxPercent] = useState(0);
 
-    cart.forEach(item => {
-      const itemSubtotal = item.selling_price * item.quantity
-      const itemDiscount = item.discountType === 'percentage'
-        ? (itemSubtotal * item.discount / 100)
-        : item.discount
-      
-      subtotal += itemSubtotal
-      totalItemDiscount += itemDiscount
-    })
-
-    const afterItemDiscount = subtotal - totalItemDiscount
-    const globalDiscountAmount = globalDiscountType === 'percentage'
-      ? (afterItemDiscount * globalDiscount / 100)
-      : globalDiscount
+  // Kalkulasi total belanja
+  const { subtotal, totalDiscount, taxAmount, finalTotal } = useMemo(() => {
+    const subtotal = cart.reduce((sum, item) => sum + item.selling_price * item.quantity, 0);
+    const totalItemDiscount = cart.reduce((sum, item) => {
+      const itemSubtotal = item.selling_price * item.quantity;
+      const discount = item.discountType === 'percentage' ? (itemSubtotal * (item.discount || 0) / 100) : (item.discount || 0);
+      return sum + discount;
+    }, 0);
+    const subtotalAfterItemDiscount = subtotal - totalItemDiscount;
+    const globalDiscountAmount = globalDiscountType === 'percentage' ? (subtotalAfterItemDiscount * globalDiscount / 100) : globalDiscount;
+    const totalDiscount = totalItemDiscount + globalDiscountAmount;
     
-    const finalTotal = Math.max(0, afterItemDiscount - globalDiscountAmount)
+    const baseForTax = subtotalAfterItemDiscount;
+    const taxAmount = baseForTax * (taxPercent / 100);
+    
+    const finalTotal = baseForTax + taxAmount;
 
-    return {
-      subtotal,
-      totalItemDiscount,
-      afterItemDiscount,
-      globalDiscountAmount,
-      finalTotal
+    return { subtotal, totalDiscount, taxAmount, finalTotal };
+  }, [cart, globalDiscount, globalDiscountType, taxPercent]);
+
+  // Kalkulasi sisa bayar, kembalian, dan status pembayaran
+  const paid = Number(amountPaid) || 0;
+  const change = paid > finalTotal ? paid - finalTotal : 0;
+  const remainingBalance = finalTotal > paid ? finalTotal - paid : 0;
+  const paymentStatus = remainingBalance > 0 ? 'partial' : 'paid';
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!customerName.trim()) {
+      toast.error('Nama pelanggan wajib diisi.');
+      return;
     }
-  }
-
-  const totals = calculateTotals()
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    try {
-      setLoading(true)
-      await onConfirm({
-        paymentMethod,
-        customerName: customerName || null,
-        customerPhone: customerPhone || null,
-        discountAmount: totals.globalDiscountAmount // Pass the calculated global discount
-      })
-    } catch (error) {
-      console.error('Checkout error:', error)
-    } finally {
-      setLoading(false)
+    if (paid <= 0 && finalTotal > 0) {
+      toast.error('Jumlah bayar harus lebih dari nol.');
+      return;
     }
-  }
+
+    onConfirm({
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      customer_address: customerAddress, // Mengirim data alamat
+      notes: notes,
+      subtotal: subtotal,
+      discount_amount: totalDiscount,
+      tax_amount: taxAmount,
+      total_amount: finalTotal,
+      amount_paid: paid,
+      remaining_balance: remainingBalance,
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
+      change: change,
+    });
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-4 md:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg md:text-xl font-bold mb-4">Konfirmasi Pembayaran</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[95vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-3">Detail Pembayaran</h2>
         
-        {/* Summary */}
-        <div className="mb-4 p-3 md:p-4 bg-gray-50 rounded space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span>Subtotal:</span>
-            <span>{formatCurrency(totals.subtotal)}</span>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Nama Pelanggan *</label>
+            <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Nama pelanggan" required />
           </div>
           
-          {totals.totalItemDiscount > 0 && (
-            <div className="flex justify-between text-red-600">
-              <span>Diskon Item:</span>
-              <span>- {formatCurrency(totals.totalItemDiscount)}</span>
+          {/* Kolom Alamat Ditambahkan di Sini */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Alamat</label>
+            <textarea value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} rows="2" className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Alamat pengantaran (jika ada)" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Telepon</label>
+              <input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="No. Telepon" />
             </div>
-          )}
-          
-          {totals.globalDiscountAmount > 0 && (
-            <div className="flex justify-between text-red-600">
-              <span>Diskon Transaksi:</span>
-              <span>- {formatCurrency(totals.globalDiscountAmount)}</span>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Email</label>
+              <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Alamat email" />
             </div>
-          )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Catatan</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="2" className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Catatan tambahan..." />
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+            <div className="flex justify-between"><span className="text-gray-600">Subtotal:</span><span>{formatCurrency(subtotal)}</span></div>
+            {totalDiscount > 0 && <div className="flex justify-between"><span className="text-gray-600">Diskon:</span><span>-{formatCurrency(totalDiscount)}</span></div>}
+            {taxAmount > 0 && <div className="flex justify-between"><span className="text-gray-600">Pajak ({taxPercent}%):</span><span>{formatCurrency(taxAmount)}</span></div>}
+            <div className="flex justify-between text-lg font-bold border-t pt-2 mt-2"><span className="text-gray-800">Total:</span><span>{formatCurrency(finalTotal)}</span></div>
+            {remainingBalance > 0 && <div className="flex justify-between text-red-600 font-bold"><span >Sisa Bayar:</span><span>{formatCurrency(remainingBalance)}</span></div>}
+            {change > 0 && <div className="flex justify-between text-green-600 font-bold"><span>Kembalian:</span><span>{formatCurrency(change)}</span></div>}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-1">
+              <label className="block text-sm font-medium text-gray-700">Pajak (%)</label>
+              <input type="number" value={taxPercent} onChange={(e) => setTaxPercent(Number(e.target.value))} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="0" min="0" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Jumlah Bayar (DP)</label>
+              <input type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="0" min="0" />
+            </div>
+          </div>
           
-          <div className="flex justify-between font-bold text-base md:text-lg pt-2 border-t">
-            <span>Total:</span>
-            <span className="text-green-600">{formatCurrency(totals.finalTotal)}</span>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-3 md:space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Metode Pembayaran
-            </label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full px-3 py-2 text-sm md:text-base border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="cash">Tunai</option>
-              <option value="debit">Debit</option>
-              <option value="credit">Credit</option>
-              <option value="qris">QRIS</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nama Pelanggan (Opsional)
-            </label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full px-3 py-2 text-sm md:text-base border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="John Doe"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              No. HP Pelanggan (Opsional)
-            </label>
-            <input
-              type="tel"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              className="w-full px-3 py-2 text-sm md:text-base border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="08123456789"
-            />
-          </div>
-
-          <div className="flex gap-2 md:gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-3 md:px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm md:text-base"
-              disabled={loading}
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-3 md:px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 text-sm md:text-base font-medium"
-              disabled={loading}
-            >
-              {loading ? 'Processing...' : 'Bayar'}
-            </button>
+          <div className="pt-4 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-100">Batal</button>
+            <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700">Konfirmasi Bayar</button>
           </div>
         </form>
       </div>
     </div>
-  )
+  );
 }

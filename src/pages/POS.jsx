@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { usePrinter } from '../contexts/PrinterContext' // DITAMBAHKAN
 import { productService } from '../services/products'
 import { transactionService } from '../services/transactions'
 import Header from '../components/layout/Header'
@@ -12,6 +13,7 @@ import { expenseService } from '../services/expenses'
 
 export default function POS() {
   const { employee, logout } = useAuth()
+  const { printReceipt, isConnected: isPrinterConnected } = usePrinter() // DITAMBAHKAN
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -30,30 +32,11 @@ export default function POS() {
   }, [])
 
   useEffect(() => {
-    groupProductsByBrandAndCategory()
-  }, [products, selectedCategory, searchTerm])
-
-  const loadInitialData = async () => {
-    try {
-      setLoading(true)
-      const [productsData, categoriesData] = await Promise.all([
-        productService.getProducts(),
-        productService.getCategories()
-      ])
-      
-      setProducts(productsData)
-      setCategories(categoriesData)
-    } catch (error) {
-      toast.error('Gagal memuat data')
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const groupProductsByBrandAndCategory = () => {
-    // Filter products first
+    // Filter & Group products
     const filtered = products.filter(product => {
+      if (!product || typeof product.name !== 'string' || typeof product.sku !== 'string') {
+        return false;
+      }
       const matchSearch = searchTerm === '' || 
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -63,24 +46,32 @@ export default function POS() {
       return matchSearch && matchCategory
     })
 
-    // Group by category and brand
     const grouped = filtered.reduce((acc, product) => {
       const categoryName = product.category_name || 'Lainnya'
       const brandName = product.brand || 'No Brand'
-      
-      if (!acc[categoryName]) {
-        acc[categoryName] = {}
-      }
-      
-      if (!acc[categoryName][brandName]) {
-        acc[categoryName][brandName] = []
-      }
-      
+      if (!acc[categoryName]) acc[categoryName] = {}
+      if (!acc[categoryName][brandName]) acc[categoryName][brandName] = []
       acc[categoryName][brandName].push(product)
       return acc
     }, {})
-
     setGroupedProducts(grouped)
+  }, [products, selectedCategory, searchTerm])
+
+  const loadInitialData = async () => {
+    try {
+      setLoading(true)
+      const [productsData, categoriesData] = await Promise.all([
+        productService.getProducts(),
+        productService.getCategories()
+      ])
+      setProducts(productsData || [])
+      setCategories(categoriesData || [])
+    } catch (error) {
+      toast.error('Gagal memuat data')
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleAddToCart = (product) => {
@@ -105,14 +96,14 @@ export default function POS() {
 
   const handleUpdateQuantity = (productId, newQuantity) => {
     if (newQuantity < 1) {
-      handleRemoveItem(productId)
-      return
+      handleRemoveItem(productId);
+      return;
     }
     
-    const product = products.find(p => p.id === productId)
-    if (newQuantity > product.current_stock) {
-      toast.error('Stok tidak mencukupi')
-      return
+    const productInCart = cart.find(p => p.id === productId);
+    if (newQuantity > productInCart.current_stock) {
+      toast.error('Stok tidak mencukupi');
+      return;
     }
     
     setCart(prev =>
@@ -128,7 +119,7 @@ export default function POS() {
     setCart(prev =>
       prev.map(item =>
         item.id === productId
-          ? { ...item, discount: discount, discountType: discountType }
+          ? { ...item, discount, discountType }
           : item
       )
     )
@@ -147,31 +138,60 @@ export default function POS() {
     setShowCheckout(true)
   }
 
+  // FUNGSI INI DIMODIFIKASI
   const handleConfirmCheckout = async (paymentDetails) => {
+    const checkoutToastId = toast.loading('Memproses transaksi...');
     try {
-      const updatedPaymentDetails = {
-        ...paymentDetails,
-        globalDiscount,
-        globalDiscountType
-      }
-      
       const result = await transactionService.createTransaction(
         cart,
         employee.id,
-        updatedPaymentDetails
-      )
+        paymentDetails
+      );
       
-      toast.success(`Transaksi berhasil! No: ${result.transaction_number}`)
-      setCart([])
-      setGlobalDiscount(0)
-      setGlobalDiscountType('amount')
-      setShowCheckout(false)
-      setShowMobileCart(false)
+      toast.success(`Transaksi berhasil! No: ${result.transaction_number}`, { id: checkoutToastId });
+
+      // LOGIKA CETAK STRUK DITAMBAHKAN
+      if (isPrinterConnected) {
+        toast.loading('Mencetak struk...', { id: 'printing-toast' });
+        try {
+          // Siapkan data untuk struk
+          const subtotal = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
+          const totalItemDiscount = cart.reduce((sum, item) => {
+            const itemSubtotal = item.selling_price * item.quantity;
+            return sum + (item.discountType === 'percentage' ? (itemSubtotal * item.discount / 100) : item.discount);
+          }, 0);
+          const subtotalAfterItemDiscount = subtotal - totalItemDiscount;
+          const globalDiscountAmount = paymentDetails.discountAmount || 0;
+          const finalTotal = subtotalAfterItemDiscount - globalDiscountAmount;
+
+          const receiptDetails = {
+              transactionNumber: result.transaction_number,
+              subtotal,
+              totalDiscount: totalItemDiscount + globalDiscountAmount,
+              finalTotal,
+              ...paymentDetails
+          };
+          
+          await printReceipt(cart, receiptDetails, employee.name);
+          toast.success('Struk berhasil dikirim ke printer.', { id: 'printing-toast' });
+        } catch (printError) {
+          toast.error(`Struk gagal dicetak: ${printError.message}`, { id: 'printing-toast' });
+          console.error("Print error after transaction:", printError);
+        }
+      } else {
+        toast.error("Printer tidak terhubung, struk tidak dicetak.", { duration: 5000 });
+      }
+
+      // Reset state
+      setCart([]);
+      setGlobalDiscount(0);
+      setGlobalDiscountType('amount');
+      setShowCheckout(false);
+      setShowMobileCart(false);
       
-      // Reload products to update stock
-      loadInitialData()
+      loadInitialData(); // Update stock
     } catch (error) {
-      toast.error('Transaksi gagal: ' + error.message)
+      toast.error('Transaksi gagal: ' + error.message, { id: checkoutToastId });
     }
   }
 
@@ -207,11 +227,8 @@ export default function POS() {
       <Header employee={employee} onLogout={logout} />
       
       <div className="flex h-[calc(100vh-4rem)] relative">
-        {/* Products Section */}
         <div className="flex-1 p-2 md:p-4 overflow-y-auto">
-          {/* Action Buttons and Search */}
           <div className="mb-3 md:mb-4 space-y-2">
-            {/* Action Buttons */}
             <div className="flex gap-2">
               <button
                 onClick={() => setShowExpense(true)}
@@ -221,7 +238,6 @@ export default function POS() {
               </button>
             </div>
             
-            {/* Search and Filters */}
             <div className="flex flex-col md:flex-row gap-2 md:gap-3">
               <input
                 type="text"
@@ -243,36 +259,33 @@ export default function POS() {
             </div>
           </div>
           
-          {/* Grouped Products Display */}
           <div className="space-y-6">
-            {Object.entries(groupedProducts).map(([categoryName, brands]) => (
-              <div key={categoryName}>
-                <h2 className="text-lg font-bold text-gray-800 mb-3 pb-2 border-b">
-                  {categoryName}
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3">
-                  {Object.entries(brands).map(([brandName, brandProducts]) => (
-                    <ProductCard
-                      key={`${categoryName}-${brandName}`}
-                      brand={brandName}
-                      products={brandProducts}
-                      onAddToCart={handleAddToCart}
-                    />
-                  ))}
+            {Object.keys(groupedProducts).length > 0 ? (
+              Object.entries(groupedProducts).map(([categoryName, brands]) => (
+                <div key={categoryName}>
+                  <h2 className="text-lg font-bold text-gray-800 mb-3 pb-2 border-b">
+                    {categoryName}
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3">
+                    {Object.entries(brands).map(([brandName, brandProducts]) => (
+                      <ProductCard
+                        key={`${categoryName}-${brandName}`}
+                        brand={brandName}
+                        products={brandProducts}
+                        onAddToCart={handleAddToCart}
+                      />
+                    ))}
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-gray-500">Tidak ada produk yang ditemukan</p>
               </div>
-            ))}
+            )}
           </div>
-
-          {/* Empty State */}
-          {Object.keys(groupedProducts).length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-gray-500">Tidak ada produk yang ditemukan</p>
-            </div>
-          )}
         </div>
         
-        {/* Desktop Cart Section */}
         <div className="hidden lg:block w-96 p-4 bg-gray-50 border-l">
           <Cart
             items={cart}
@@ -289,14 +302,11 @@ export default function POS() {
           />
         </div>
 
-        {/* Mobile Cart Button */}
         <button
           onClick={() => setShowMobileCart(true)}
           className="lg:hidden fixed bottom-4 right-4 bg-blue-600 text-white rounded-full p-4 shadow-lg flex items-center justify-center z-40"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           {getCartItemCount() > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center">
               {getCartItemCount()}
@@ -304,18 +314,12 @@ export default function POS() {
           )}
         </button>
 
-        {/* Mobile Cart Modal */}
         {showMobileCart && (
           <div className="lg:hidden fixed inset-0 bg-white z-50 flex flex-col">
             <div className="bg-white shadow-sm p-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">Keranjang</h2>
-              <button
-                onClick={() => setShowMobileCart(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+              <button onClick={() => setShowMobileCart(false)} className="text-gray-500 hover:text-gray-700">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
@@ -337,7 +341,6 @@ export default function POS() {
         )}
       </div>
       
-      {/* Checkout Modal */}
       {showCheckout && (
         <CheckoutModal
           cart={cart}
@@ -348,7 +351,6 @@ export default function POS() {
         />
       )}
       
-      {/* Expense Modal */}
       {showExpense && (
         <ExpenseModal
           onClose={() => setShowExpense(false)}

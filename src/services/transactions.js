@@ -1,86 +1,80 @@
 import { supabase } from './supabase'
 
-export const transactionService = {
-  async createTransaction(cartItems, cashierId, paymentDetails = {}) {
-    try {
-      // Prepare items for the stored procedure
-      // Include item-level discounts in the calculation
-      const itemsJson = cartItems.map(item => {
-        const itemSubtotal = item.selling_price * item.quantity
-        const itemDiscountAmount = item.discountType === 'percentage'
-          ? (itemSubtotal * item.discount / 100)
-          : item.discount
-          
-        return {
-          product_id: item.id,
-          quantity: item.quantity,
-          price: item.selling_price,
-          discount: itemDiscountAmount // Send calculated discount amount
-        }
-      })
+const createTransaction = async (cartItems, cashierId, paymentDetails) => {
+  // Membuat Nomor Transaksi Unik
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const transactionNumber = `INV-${year}${month}${day}-${hours}${minutes}${seconds}`;
 
-      // Call the stored procedure
-      const { data, error } = await supabase.rpc('process_transaction', {
-        p_items: itemsJson,
-        p_cashier_id: cashierId,
-        p_discount_amount: paymentDetails.discountAmount || 0,
-        p_payment_method: paymentDetails.paymentMethod || 'cash',
-        p_customer_name: paymentDetails.customerName || null,
-        p_customer_phone: paymentDetails.customerPhone || null
-      })
+  // 1. Masukkan data transaksi utama ke tabel 'transactions'
+  const { data: transaction, error: transactionError } = await supabase
+    .from('transactions')
+    .insert({
+      transaction_number: transactionNumber, 
+      transaction_date: now.toISOString(),
+      subtotal: paymentDetails.subtotal,
+      discount_amount: paymentDetails.discount_amount,
+      tax_amount: paymentDetails.tax_amount,
+      total_amount: paymentDetails.total_amount,
+      payment_method: paymentDetails.payment_method,
+      payment_status: paymentDetails.payment_status,
+      customer_name: paymentDetails.customer_name,
+      customer_phone: paymentDetails.customer_phone,
+      customer_email: paymentDetails.customer_email,
+      customer_address: paymentDetails.customer_address, // Kolom alamat ditambahkan
+      notes: paymentDetails.notes,
+      cashier_id: cashierId,
+      amount_paid: paymentDetails.amount_paid, 
+      remaining_balance: paymentDetails.remaining_balance,
+    })
+    .select()
+    .single();
 
-      if (error) throw error
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Transaction failed')
-      }
-
-      return data
-    } catch (error) {
-      console.error('Transaction error:', error)
-      throw error
-    }
-  },
-
-  async getTodayTransactions() {
-    try {
-      const today = new Date().toISOString().split('T')[0]
-      
-      const { data, error } = await supabase
-        .from('v_transaction_summary')
-        .select('*')
-        .gte('transaction_date', today)
-        .order('transaction_date', { ascending: false })
-
-      if (error) throw error
-      return data || []
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
-      throw error
-    }
-  },
-
-  async getDailySales() {
-    try {
-      const today = new Date().toISOString().split('T')[0]
-      
-      const { data, error } = await supabase
-        .from('v_daily_sales')
-        .select('*')
-        .eq('sales_date', today)
-        .single()
-
-      if (error && error.code !== 'PGRST116') throw error
-      
-      return data || {
-        total_transactions: 0,
-        total_sales: 0,
-        total_discount: 0,
-        average_transaction: 0
-      }
-    } catch (error) {
-      console.error('Error fetching daily sales:', error)
-      throw error
-    }
+  if (transactionError) {
+    console.error('Error creating transaction:', transactionError);
+    throw new Error('Gagal membuat data transaksi utama.');
   }
-}
+
+  // 2. Masukkan setiap item di keranjang ke tabel 'transaction_items'
+  const transactionItems = cartItems.map(item => ({
+    transaction_id: transaction.id,
+    product_id: item.id,
+    quantity: item.quantity,
+    price_at_sale: item.selling_price,
+    discount_amount: item.discountType === 'percentage' 
+      ? (item.selling_price * item.quantity * (item.discount || 0) / 100)
+      : (item.discount || 0),
+    discount_type: item.discountType,
+  }));
+
+  const { error: itemsError } = await supabase
+    .from('transaction_items')
+    .insert(transactionItems);
+
+  if (itemsError) {
+    console.error('Error creating transaction items:', itemsError);
+    throw new Error('Gagal menyimpan item transaksi.');
+  }
+
+  // 3. Panggil fungsi RPC untuk update stok produk
+  const { error: stockError } = await supabase.rpc('update_stock_from_transaction', {
+    transaction_id_param: transaction.id
+  });
+
+  if (stockError) {
+    console.error('Error updating stock:', stockError);
+    throw new Error('Gagal memperbarui stok produk.');
+  }
+
+  // 4. Kembalikan nomor transaksi untuk ditampilkan
+  return { transaction_number: transaction.transaction_number };
+};
+
+export const transactionService = {
+  createTransaction,
+};
