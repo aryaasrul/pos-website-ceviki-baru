@@ -22,11 +22,16 @@ export default function POS() {
   const [showExpense, setShowExpense] = useState(false)
   const [showMobileCart, setShowMobileCart] = useState(false)
   const [globalDiscount, setGlobalDiscount] = useState(0)
-  const [globalDiscountType, setGlobalDiscountType] = useState('amount') // 'amount' or 'percentage'
+  const [globalDiscountType, setGlobalDiscountType] = useState('amount')
+  const [groupedProducts, setGroupedProducts] = useState({})
 
   useEffect(() => {
     loadInitialData()
   }, [])
+
+  useEffect(() => {
+    groupProductsByBrandAndCategory()
+  }, [products, selectedCategory, searchTerm])
 
   const loadInitialData = async () => {
     try {
@@ -46,14 +51,37 @@ export default function POS() {
     }
   }
 
-  const filteredProducts = products.filter(product => {
-    const matchSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       product.model?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchCategory = selectedCategory === 'all' || product.category_id === selectedCategory
-    return matchSearch && matchCategory
-  })
+  const groupProductsByBrandAndCategory = () => {
+    // Filter products first
+    const filtered = products.filter(product => {
+      const matchSearch = searchTerm === '' || 
+        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.model?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchCategory = selectedCategory === 'all' || product.category_id === selectedCategory
+      return matchSearch && matchCategory
+    })
+
+    // Group by category and brand
+    const grouped = filtered.reduce((acc, product) => {
+      const categoryName = product.category_name || 'Lainnya'
+      const brandName = product.brand || 'No Brand'
+      
+      if (!acc[categoryName]) {
+        acc[categoryName] = {}
+      }
+      
+      if (!acc[categoryName][brandName]) {
+        acc[categoryName][brandName] = []
+      }
+      
+      acc[categoryName][brandName].push(product)
+      return acc
+    }, {})
+
+    setGroupedProducts(grouped)
+  }
 
   const handleAddToCart = (product) => {
     setCart(prev => {
@@ -121,7 +149,6 @@ export default function POS() {
 
   const handleConfirmCheckout = async (paymentDetails) => {
     try {
-      // Include both global and item discounts
       const updatedPaymentDetails = {
         ...paymentDetails,
         globalDiscount,
@@ -216,16 +243,33 @@ export default function POS() {
             </div>
           </div>
           
-          {/* Product Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3">
-            {filteredProducts.map(product => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onAddToCart={handleAddToCart}
-              />
+          {/* Grouped Products Display */}
+          <div className="space-y-6">
+            {Object.entries(groupedProducts).map(([categoryName, brands]) => (
+              <div key={categoryName}>
+                <h2 className="text-lg font-bold text-gray-800 mb-3 pb-2 border-b">
+                  {categoryName}
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3">
+                  {Object.entries(brands).map(([brandName, brandProducts]) => (
+                    <ProductCard
+                      key={`${categoryName}-${brandName}`}
+                      brand={brandName}
+                      products={brandProducts}
+                      onAddToCart={handleAddToCart}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
+
+          {/* Empty State */}
+          {Object.keys(groupedProducts).length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Tidak ada produk yang ditemukan</p>
+            </div>
+          )}
         </div>
         
         {/* Desktop Cart Section */}
