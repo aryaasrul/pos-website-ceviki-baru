@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { usePrinter } from '../contexts/PrinterContext' // DITAMBAHKAN
+import { usePrinter } from '../contexts/PrinterContext'
 import { productService } from '../services/products'
 import { transactionService } from '../services/transactions'
 import Header from '../components/layout/Header'
@@ -13,7 +13,7 @@ import { expenseService } from '../services/expenses'
 
 export default function POS() {
   const { employee, logout } = useAuth()
-  const { printReceipt, isConnected: isPrinterConnected } = usePrinter() // DITAMBAHKAN
+  const { printReceipt, isConnected: isPrinterConnected } = usePrinter()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -138,19 +138,32 @@ export default function POS() {
     setShowCheckout(true)
   }
 
-  // FUNGSI INI DIMODIFIKASI
+  // ========================================================================
+  // INILAH FUNGSI YANG DIPERBAIKI
+  // ========================================================================
   const handleConfirmCheckout = async (paymentDetails) => {
     const checkoutToastId = toast.loading('Memproses transaksi...');
     try {
+      // 1. Membuat satu objek 'transactionData' yang rapi.
+      // Ini menggabungkan detail dari modal checkout, ID kasir, dan diskon global.
+      const transactionData = {
+        ...paymentDetails, // Berisi customer_name, amount_paid, dll.
+        cashier_id: employee.id,
+        // Nama properti `discount_amount` di sini harus sesuai dengan yang diharapkan
+        // oleh service, yang kemudian akan menjadi `p_discount_amount_global` di RPC.
+        discount_amount: paymentDetails.discount_amount || 0,
+      };
+
+      // 2. Memanggil service dengan DUA argumen yang benar dan sesuai urutan:
+      // Argumen pertama: objekData. Argumen kedua: arrayItem.
       const result = await transactionService.createTransaction(
-        cart,
-        employee.id,
-        paymentDetails
+        transactionData,
+        cart
       );
       
       toast.success(`Transaksi berhasil! No: ${result.transaction_number}`, { id: checkoutToastId });
 
-      // LOGIKA CETAK STRUK DITAMBAHKAN
+      // Logika untuk cetak struk tidak perlu diubah
       if (isPrinterConnected) {
         toast.loading('Mencetak struk...', { id: 'printing-toast' });
         try {
@@ -158,16 +171,15 @@ export default function POS() {
           const subtotal = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
           const totalItemDiscount = cart.reduce((sum, item) => {
             const itemSubtotal = item.selling_price * item.quantity;
-            return sum + (item.discountType === 'percentage' ? (itemSubtotal * item.discount / 100) : item.discount);
+            const discount = item.discountType === 'percentage' ? (itemSubtotal * (item.discount || 0) / 100) : (item.discount || 0);
+            return sum + discount;
           }, 0);
-          const subtotalAfterItemDiscount = subtotal - totalItemDiscount;
-          const globalDiscountAmount = paymentDetails.discountAmount || 0;
-          const finalTotal = subtotalAfterItemDiscount - globalDiscountAmount;
+          const finalTotal = subtotal - totalItemDiscount - (paymentDetails.discount_amount || 0);
 
           const receiptDetails = {
               transactionNumber: result.transaction_number,
               subtotal,
-              totalDiscount: totalItemDiscount + globalDiscountAmount,
+              totalDiscount: totalItemDiscount + (paymentDetails.discount_amount || 0),
               finalTotal,
               ...paymentDetails
           };
@@ -182,18 +194,24 @@ export default function POS() {
         toast.error("Printer tidak terhubung, struk tidak dicetak.", { duration: 5000 });
       }
 
-      // Reset state
+      // Reset state setelah semua berhasil
       setCart([]);
       setGlobalDiscount(0);
       setGlobalDiscountType('amount');
       setShowCheckout(false);
       setShowMobileCart(false);
+      loadInitialData(); // Muat ulang data untuk update stok di UI
       
-      loadInitialData(); // Update stock
     } catch (error) {
-      toast.error('Transaksi gagal: ' + error.message, { id: checkoutToastId });
+      // Jika ada error dari mana pun, akan ditangkap di sini
+      toast.error(`Transaksi gagal: ${error.message}`, { id: checkoutToastId });
+      console.error("Checkout failed:", error); 
     }
   }
+  // ========================================================================
+  // AKHIR DARI FUNGSI YANG DIPERBAIKI
+  // ========================================================================
+
 
   const handleAddExpense = async (expenseData) => {
     try {
