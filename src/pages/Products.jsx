@@ -214,12 +214,11 @@ function ProductModal({ product, categories, brands, onClose, onSave }) {
     sku: product?.sku || '',
     cost_price: product?.cost_price || 0,
     selling_price: product?.selling_price || 0,
-    // min_stock dihapus dari sini
   })
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newBrandName, setNewBrandName] = useState('')
   const [loading, setLoading] = useState(false)
-  const [initialStock, setInitialStock] = useState(0);
+  const [initialStock, setInitialStock] = useState(0)
 
   useEffect(() => {
     const { category_id, brand, model } = formData
@@ -240,22 +239,38 @@ function ProductModal({ product, categories, brands, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    let finalCategoryId = formData.category_id;
-    let finalBrandName = formData.brand;
+    // Validation
+    let finalCategoryId = formData.category_id
+    let finalBrandName = formData.brand
 
-    if (!finalCategoryId || (finalCategoryId === 'new' && !newCategoryName.trim())) { toast.error('Kategori wajib diisi'); return; }
-    if (!finalBrandName || (finalBrandName === 'new' && !newBrandName.trim())) { toast.error('Merk wajib diisi'); return; }
+    if (!finalCategoryId || (finalCategoryId === 'new' && !newCategoryName.trim())) { 
+      toast.error('Kategori wajib diisi')
+      return
+    }
+    if (!finalBrandName || (finalBrandName === 'new' && !newBrandName.trim())) { 
+      toast.error('Merk wajib diisi')
+      return
+    }
 
+    // Prevent double submission
+    if (loading) return
+    
     setLoading(true)
     try {
+        // Create new category if needed
         if (finalCategoryId === 'new') {
-            const { data: newCategory, error: catError } = await supabase.from('categories').insert({ name: newCategoryName.trim() }).select().single()
+            const { data: newCategory, error: catError } = await supabase
+              .from('categories')
+              .insert({ name: newCategoryName.trim() })
+              .select()
+              .single()
             if (catError) throw catError
             finalCategoryId = newCategory.id
         }
 
+        // Use new brand name if creating new
         if (finalBrandName === 'new') {
-            finalBrandName = newBrandName.trim();
+            finalBrandName = newBrandName.trim()
         }
 
         const productData = {
@@ -264,15 +279,21 @@ function ProductModal({ product, categories, brands, onClose, onSave }) {
             brand: finalBrandName,
             cost_price: parseFloat(formData.cost_price),
             selling_price: parseFloat(formData.selling_price),
-            // min_stock dihapus dari sini
         }
 
-        let error;
+        let error
         if (product) {
-            ({ error } = await supabase.from('products').update(productData).eq('id', product.id))
+            // Update existing product
+            ({ error } = await supabase
+              .from('products')
+              .update(productData)
+              .eq('id', product.id))
         } else {
-            productData.current_stock = initialStock;
-            ({ error } = await supabase.from('products').insert(productData))
+            // Create new product with initial stock
+            productData.current_stock = initialStock
+            ({ error } = await supabase
+              .from('products')
+              .insert(productData))
         }
 
         if (error) throw error
@@ -291,46 +312,151 @@ function ProductModal({ product, categories, brands, onClose, onSave }) {
         <h2 className="text-xl font-bold mb-6">{product ? 'Edit Produk' : 'Tambah Produk'}</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+            {/* Category Selection */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Kategori *</label>
-                <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full px-3 py-2 border rounded-md">
+                <select 
+                  value={formData.category_id} 
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} 
+                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  disabled={loading}
+                >
                     <option value="">Pilih Kategori</option>
                     {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                     <option value="new">-- Tambah Kategori Baru --</option>
                 </select>
-                {formData.category_id === 'new' && <input type="text" placeholder="Nama kategori baru" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="mt-2 w-full px-3 py-2 border rounded-md" />}
+                {formData.category_id === 'new' && (
+                  <input 
+                    type="text" 
+                    placeholder="Nama kategori baru" 
+                    value={newCategoryName} 
+                    onChange={(e) => setNewCategoryName(e.target.value)} 
+                    className="mt-2 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                    disabled={loading}
+                  />
+                )}
             </div>
+            
+            {/* Brand Selection */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Merk *</label>
-                <select value={formData.brand} onChange={(e) => setFormData({ ...formData, brand: e.target.value })} className="w-full px-3 py-2 border rounded-md">
+                <select 
+                  value={formData.brand} 
+                  onChange={(e) => setFormData({ ...formData, brand: e.target.value })} 
+                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  disabled={loading}
+                >
                     <option value="">Pilih Merk</option>
                     {brands.map(b => <option key={b} value={b}>{b}</option>)}
                     <option value="new">-- Tambah Merk Baru --</option>
                 </select>
-                {formData.brand === 'new' && <input type="text" placeholder="Nama merk baru" value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} className="mt-2 w-full px-3 py-2 border rounded-md" />}
+                {formData.brand === 'new' && (
+                  <input 
+                    type="text" 
+                    placeholder="Nama merk baru" 
+                    value={newBrandName} 
+                    onChange={(e) => setNewBrandName(e.target.value)} 
+                    className="mt-2 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                    disabled={loading}
+                  />
+                )}
             </div>
+            
+            {/* Model */}
             <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Model / Tipe</label>
-                <input type="text" value={formData.model} onChange={(e) => setFormData({...formData, model: e.target.value})} className="w-full px-3 py-2 border rounded-md" />
+                <input 
+                  type="text" 
+                  value={formData.model} 
+                  onChange={(e) => setFormData({...formData, model: e.target.value})} 
+                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  disabled={loading}
+                />
             </div>
-            <div className="bg-gray-50 p-3 rounded-md"><label className="block text-sm font-medium text-gray-500 mb-1">Nama Produk (Otomatis)</label><input type="text" value={formData.name} className="w-full px-3 py-2 bg-gray-200 border rounded-md" readOnly disabled /></div>
-            <div className="bg-gray-50 p-3 rounded-md"><label className="block text-sm font-medium text-gray-500 mb-1">SKU (Otomatis)</label><input type="text" value={formData.sku} className="w-full px-3 py-2 bg-gray-200 border rounded-md" readOnly disabled /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Harga Modal</label><input type="number" value={formData.cost_price} onChange={(e) => setFormData({...formData, cost_price: e.target.value})} className="w-full px-3 py-2 border rounded-md" min="0" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Harga Jual</label><input type="number" value={formData.selling_price} onChange={(e) => setFormData({...formData, selling_price: e.target.value})} className="w-full px-3 py-2 border rounded-md" min="0" /></div>
             
+            {/* Auto-generated Name */}
+            <div className="bg-gray-50 p-3 rounded-md">
+                <label className="block text-sm font-medium text-gray-500 mb-1">Nama Produk (Otomatis)</label>
+                <input 
+                  type="text" 
+                  value={formData.name} 
+                  className="w-full px-3 py-2 bg-gray-200 border rounded-md" 
+                  readOnly 
+                  disabled 
+                />
+            </div>
+            
+            {/* Auto-generated SKU */}
+            <div className="bg-gray-50 p-3 rounded-md">
+                <label className="block text-sm font-medium text-gray-500 mb-1">SKU (Otomatis)</label>
+                <input 
+                  type="text" 
+                  value={formData.sku} 
+                  className="w-full px-3 py-2 bg-gray-200 border rounded-md" 
+                  readOnly 
+                  disabled 
+                />
+            </div>
+            
+            {/* Cost Price */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Harga Modal</label>
+                <input 
+                  type="number" 
+                  value={formData.cost_price} 
+                  onChange={(e) => setFormData({...formData, cost_price: e.target.value})} 
+                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" 
+                  min="0"
+                  disabled={loading}
+                />
+            </div>
+            
+            {/* Selling Price */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Harga Jual</label>
+                <input 
+                  type="number" 
+                  value={formData.selling_price} 
+                  onChange={(e) => setFormData({...formData, selling_price: e.target.value})} 
+                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" 
+                  min="0"
+                  disabled={loading}
+                />
+            </div>
+            
+            {/* Initial Stock (only for new products) */}
             {!product && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Stok Awal</label>
-                <input type="number" value={initialStock} onChange={(e) => setInitialStock(Number(e.target.value))} className="w-full px-3 py-2 border rounded-md" min="0" />
+                <input 
+                  type="number" 
+                  value={initialStock} 
+                  onChange={(e) => setInitialStock(Number(e.target.value))} 
+                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" 
+                  min="0"
+                  disabled={loading}
+                />
               </div>
             )}
-            
-            {/* Input Stok Minimum Dihapus */}
         </div>
         
+        {/* Action Buttons */}
         <div className="flex gap-3 justify-end mt-6 pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md" disabled={loading}>Batal</button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md" disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan'}</button>
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium" 
+              disabled={loading}
+            >
+              Batal
+            </button>
+            <button 
+              type="submit" 
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:bg-blue-400 disabled:cursor-not-allowed" 
+              disabled={loading}
+            >
+              {loading ? 'Menyimpan...' : 'Simpan'}
+            </button>
         </div>
       </form>
     </div>
@@ -339,63 +465,134 @@ function ProductModal({ product, categories, brands, onClose, onSave }) {
 
 // --- STOCK MODAL COMPONENT ---
 function StockModal({ product, onClose, onSave }) {
-  const [adjustmentType, setAdjustmentType] = useState('in');
-  const [quantity, setQuantity] = useState('');
-  const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [adjustmentType, setAdjustmentType] = useState('in')
+  const [quantity, setQuantity] = useState('')
+  const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!quantity || parseInt(quantity) < 0) { toast.error('Jumlah tidak valid'); return; }
+    e.preventDefault()
+    
+    // Validation
+    const qty = parseInt(quantity, 10)
+    if (!quantity || isNaN(qty) || qty <= 0) { 
+      toast.error('Jumlah harus berupa angka positif')
+      return
+    }
 
-    setLoading(true);
+    // Prevent double submission
+    if (loading) {
+      toast.warning('Proses sedang berjalan, mohon tunggu...')
+      return
+    }
+
+    setLoading(true)
+    const toastId = toast.loading('Memproses penyesuaian stok...')
+    
     try {
-        // --- PERBAIKAN: Menghapus p_user_id ---
         const { error } = await supabase.rpc('adjust_stock', {
             p_product_id: product.id,
             p_type: adjustmentType,
-            p_quantity: parseInt(quantity, 10),
+            p_quantity: qty,
             p_notes: notes || `Penyesuaian stok (${adjustmentType})`
-        });
+        })
 
-        if (error) throw error;
-        toast.success('Stok berhasil diupdate');
-        onSave();
+        if (error) throw error
+        
+        toast.success('Stok berhasil diperbarui', { id: toastId })
+        onSave()
     } catch (error) {
-        toast.error('Gagal update stok: ' + error.message);
+        console.error('Stock adjustment error:', error)
+        toast.error('Gagal memperbarui stok: ' + error.message, { id: toastId })
     } finally {
-        setLoading(false);
+        setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-4">Penyesuaian Stok</h2>
-        <div className="mb-4 p-4 bg-gray-50 rounded">
-          <h3 className="font-medium">{product?.name}</h3>
-          <p className="text-sm text-gray-500">Stok Saat Ini: {product?.current_stock}</p>
+        
+        {/* Product Info */}
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+          <h3 className="font-medium text-gray-900">{product?.name}</h3>
+          <p className="text-sm text-gray-500">SKU: {product?.sku}</p>
+          <p className="text-sm text-gray-600">Stok Saat Ini: <span className="font-semibold">{product?.current_stock}</span></p>
         </div>
+        
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Adjustment Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tipe</label>
-            <select value={adjustmentType} onChange={(e) => setAdjustmentType(e.target.value)} className="w-full px-3 py-2 border rounded-md">
-              <option value="in">Stok Masuk</option>
-              <option value="out">Stok Keluar</option>
-              <option value="adjustment">Setel Ulang Stok</option>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Penyesuaian</label>
+            <select 
+              value={adjustmentType} 
+              onChange={(e) => setAdjustmentType(e.target.value)} 
+              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+            >
+              <option value="in">Stok Masuk (+)</option>
+              <option value="out">Stok Keluar (-)</option>
+              <option value="adjustment">Setel Ulang Stok (=)</option>
             </select>
           </div>
+          
+          {/* Quantity Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{adjustmentType === 'adjustment' ? 'Jumlah Stok Baru' : 'Jumlah'}</label>
-            <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full px-3 py-2 border rounded-md" min="0" required />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {adjustmentType === 'adjustment' ? 'Jumlah Stok Baru' : 'Jumlah'}
+            </label>
+            <input 
+              type="number" 
+              value={quantity} 
+              onChange={(e) => setQuantity(e.target.value)} 
+              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" 
+              min="0" 
+              step="1"
+              placeholder={adjustmentType === 'adjustment' ? 'Masukkan jumlah stok final' : 'Masukkan jumlah'}
+              disabled={loading}
+              required 
+            />
+            {adjustmentType !== 'adjustment' && quantity && (
+              <p className="text-xs text-gray-500 mt-1">
+                Stok akan menjadi: {adjustmentType === 'in' 
+                  ? product.current_stock + parseInt(quantity || 0) 
+                  : Math.max(0, product.current_stock - parseInt(quantity || 0))
+                }
+              </p>
+            )}
           </div>
+          
+          {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Catatan</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 border rounded-md" rows="3" />
+            <textarea 
+              value={notes} 
+              onChange={(e) => setNotes(e.target.value)} 
+              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" 
+              rows="3"
+              placeholder="Catatan penyesuaian stok (opsional)"
+              disabled={loading}
+            />
           </div>
+          
+          {/* Action Buttons */}
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border rounded-md" disabled={loading}>Batal</button>
-            <button type="submit" className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md" disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan'}</button>
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium" 
+              disabled={loading}
+            >
+              Batal
+            </button>
+            <button 
+              type="submit" 
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium disabled:bg-green-400 disabled:cursor-not-allowed" 
+              disabled={loading}
+            >
+              {loading ? 'Memproses...' : 'Simpan'}
+            </button>
           </div>
         </form>
       </div>
