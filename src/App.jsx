@@ -1,20 +1,31 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './contexts/AuthContext'
 import { PrinterProvider } from './contexts/PrinterContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
-// Pages
+// Import hanya Login langsung (karena ini first page)
 import Login from './pages/Login'
-import POS from './pages/POS'
-import Products from './pages/Products'
-import Dashboard from './pages/Dashboard'
-import Reports from './pages/Reports'
-import Statistics from './pages/Statistics'
-import Employees from './pages/Employees'
-import Settings from './pages/Settings'
 
+// Lazy load semua pages yang lain
+const POS = React.lazy(() => import('./pages/POS'))
+const Products = React.lazy(() => import('./pages/Products'))
+const Dashboard = React.lazy(() => import('./pages/Dashboard'))
+const Reports = React.lazy(() => import('./pages/Reports'))
+const Statistics = React.lazy(() => import('./pages/Statistics'))
+const Employees = React.lazy(() => import('./pages/Employees'))
+const Settings = React.lazy(() => import('./pages/Settings'))
+
+// Loading component yang bagus
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+      <p className="mt-4 text-gray-600 font-medium">Loading...</p>
+    </div>
+  </div>
+)
 
 function App() {
   return (
@@ -43,49 +54,63 @@ function App() {
           />
           
           <Routes>
-            {/* Public Routes */}
+            {/* Public Routes - No lazy loading untuk login */}
             <Route path="/login" element={<Login />} />
             
-            {/* Protected Routes */}
+            {/* Protected Routes - Semua dengan lazy loading */}
             <Route path="/pos" element={
               <ProtectedRoute>
-                <POS />
+                <Suspense fallback={<PageLoader />}>
+                  <POS />
+                </Suspense>
               </ProtectedRoute>
             } />
             
             <Route path="/products" element={
               <ProtectedRoute requireOwner>
-                <Products />
+                <Suspense fallback={<PageLoader />}>
+                  <Products />
+                </Suspense>
               </ProtectedRoute>
             } />
             
             <Route path="/dashboard" element={
               <ProtectedRoute requireOwner>
-                <Dashboard />
+                <Suspense fallback={<PageLoader />}>
+                  <Dashboard />
+                </Suspense>
               </ProtectedRoute>
             } />
             
             <Route path="/reports" element={
               <ProtectedRoute requireOwner>
-                <Reports />
+                <Suspense fallback={<PageLoader />}>
+                  <Reports />
+                </Suspense>
               </ProtectedRoute>
             } />
 
             <Route path="/statistics" element={
               <ProtectedRoute requireOwner>
-                <Statistics />
+                <Suspense fallback={<PageLoader />}>
+                  <Statistics />
+                </Suspense>
               </ProtectedRoute>
             } />
 
             <Route path="/employees" element={
               <ProtectedRoute requireOwner>
-                <Employees />
+                <Suspense fallback={<PageLoader />}>
+                  <Employees />
+                </Suspense>
               </ProtectedRoute>
             } />
 
             <Route path="/settings" element={
               <ProtectedRoute requireOwner>
-                <Settings />
+                <Suspense fallback={<PageLoader />}>
+                  <Settings />
+                </Suspense>
               </ProtectedRoute>
             } />
 
