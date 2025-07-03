@@ -1,21 +1,22 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './contexts/AuthContext'
 import { PrinterProvider } from './contexts/PrinterContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
+import { lazyPreload, smartPreload } from './utils/lazyPreload.jsx'
 
 // Import hanya Login langsung (karena ini first page)
 import Login from './pages/Login'
 
-// Lazy load semua pages yang lain
-const POS = React.lazy(() => import('./pages/POS'))
-const Products = React.lazy(() => import('./pages/Products'))
-const Dashboard = React.lazy(() => import('./pages/Dashboard'))
-const Reports = React.lazy(() => import('./pages/Reports'))
-const Statistics = React.lazy(() => import('./pages/Statistics'))
-const Employees = React.lazy(() => import('./pages/Employees'))
-const Settings = React.lazy(() => import('./pages/Settings'))
+// Lazy load dengan preload capability
+const POS = lazyPreload(() => import('./pages/POS'))
+const Products = lazyPreload(() => import('./pages/Products'))
+const Dashboard = lazyPreload(() => import('./pages/Dashboard'))
+const Reports = lazyPreload(() => import('./pages/Reports'))
+const Statistics = lazyPreload(() => import('./pages/Statistics'))
+const Employees = lazyPreload(() => import('./pages/Employees'))
+const Settings = lazyPreload(() => import('./pages/Settings'))
 
 // Loading component yang bagus
 const PageLoader = () => (
@@ -28,6 +29,25 @@ const PageLoader = () => (
 )
 
 function App() {
+  // Preload strategy - load components yang kemungkinan besar akan diakses
+  useEffect(() => {
+    // Tunggu initial load selesai, baru preload
+    const timer = setTimeout(() => {
+      // POS adalah page utama, preload duluan
+      smartPreload([POS, Dashboard])
+        .then(() => {
+          // Setelah POS & Dashboard loaded, preload yang lain
+          return smartPreload([Products, Reports, Settings])
+        })
+        .catch(err => {
+          console.log('Preload failed:', err)
+          // Gagal preload tidak masalah, user masih bisa navigate normal
+        })
+    }, 2000) // Delay 2 detik setelah app load
+
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
     <Router>
       <AuthProvider>

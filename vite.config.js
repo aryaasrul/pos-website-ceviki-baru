@@ -10,11 +10,15 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Pisahkan vendor chunks untuk caching yang lebih baik
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui-vendor': ['react-hot-toast'],
-          'chart-vendor': ['recharts', 'chart.js', 'react-chartjs-2'],
+          // React ecosystem
+          'react-vendor': ['react', 'react-dom'],
+          'router': ['react-router-dom'],
+          // Chart libraries (heavy)
+          'charts': ['recharts', 'chart.js', 'react-chartjs-2'],
+          // Supabase
           'supabase': ['@supabase/supabase-js'],
+          // UI Components
+          'ui-libs': ['react-hot-toast'],
         }
       }
     },
@@ -22,38 +26,37 @@ export default defineConfig({
     // Tingkatkan chunk size warning limit
     chunkSizeWarningLimit: 1000,
     
-    // Enable source maps untuk debugging production (optional)
-    sourcemap: false,
-    
     // Optimize untuk production
     minify: 'esbuild',
-    target: 'es2015'
+    target: 'es2015',
+    
+    // CSS code splitting
+    cssCodeSplit: true,
+    
+    // Sourcemap hanya untuk development
+    sourcemap: false
   },
 
   // Optimasi dependencies
   optimizeDeps: {
     include: [
+      // Core dependencies yang selalu dibutuhkan
       'react',
       'react-dom',
       'react-router-dom',
       'react-hot-toast',
       '@supabase/supabase-js'
-    ],
-    exclude: [
-      // Exclude heavy dependencies yang tidak perlu di-optimize
-      'recharts',
-      'chart.js'
     ]
   },
 
   // Server configuration untuk development
   server: {
     port: 3000,
-    open: false, // Jangan auto-open browser
+    open: false,
     cors: true
   },
 
-  // Preview server untuk testing production build
+  // Preview server
   preview: {
     port: 4173,
     open: false
