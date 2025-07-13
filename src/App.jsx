@@ -34,16 +34,11 @@ function App() {
     // Tunggu initial load selesai, baru preload
     const timer = setTimeout(() => {
       // POS adalah page utama, preload duluan
-      smartPreload([POS, Dashboard])
-        .then(() => {
-          // Setelah POS & Dashboard loaded, preload yang lain
-          return smartPreload([Products, Reports, Settings])
-        })
-        .catch(err => {
-          console.log('Preload failed:', err)
-          // Gagal preload tidak masalah, user masih bisa navigate normal
-        })
-    }, 2000) // Delay 2 detik setelah app load
+      smartPreload([POS, Products]).then(() => {
+        // Setelah POS & Products loaded, preload sisanya
+        smartPreload([Dashboard, Reports, Statistics, Employees, Settings])
+      })
+    }, 2000)
 
     return () => clearTimeout(timer)
   }, [])
@@ -52,91 +47,48 @@ function App() {
     <Router>
       <AuthProvider>
         <PrinterProvider>
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#363636',
-                color: '#fff',
-              },
-              success: {
-                style: {
-                  background: 'green',
-                },
-              },
-              error: {
-                style: {
-                  background: 'red',
-                },
-              },
-            }}
-          />
-          
-          <Routes>
-            {/* Public Routes - No lazy loading untuk login */}
-            <Route path="/login" element={<Login />} />
-            
-            {/* Protected Routes - Semua dengan lazy loading */}
-            <Route path="/pos" element={
-              <ProtectedRoute>
-                <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/pos" element={
+                <ProtectedRoute>
                   <POS />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/products" element={
-              <ProtectedRoute requireOwner>
-                <Suspense fallback={<PageLoader />}>
-                  <Products />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/dashboard" element={
-              <ProtectedRoute requireOwner>
-                <Suspense fallback={<PageLoader />}>
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard" element={
+                <ProtectedRoute requireOwner>
                   <Dashboard />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/reports" element={
-              <ProtectedRoute requireOwner>
-                <Suspense fallback={<PageLoader />}>
+                </ProtectedRoute>
+              } />
+              <Route path="/products" element={
+                <ProtectedRoute requireOwner>
+                  <Products />
+                </ProtectedRoute>
+              } />
+              <Route path="/reports" element={
+                <ProtectedRoute requireOwner>
                   <Reports />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-
-            <Route path="/statistics" element={
-              <ProtectedRoute requireOwner>
-                <Suspense fallback={<PageLoader />}>
+                </ProtectedRoute>
+              } />
+              <Route path="/statistics" element={
+                <ProtectedRoute requireOwner>
                   <Statistics />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-
-            <Route path="/employees" element={
-              <ProtectedRoute requireOwner>
-                <Suspense fallback={<PageLoader />}>
+                </ProtectedRoute>
+              } />
+              <Route path="/employees" element={
+                <ProtectedRoute requireOwner>
                   <Employees />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-
-            <Route path="/settings" element={
-              <ProtectedRoute requireOwner>
-                <Suspense fallback={<PageLoader />}>
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute requireOwner>
                   <Settings />
-                </Suspense>
-              </ProtectedRoute>
-            } />
-
-            {/* Default Route */}
-            <Route path="/" element={<Navigate to="/pos" replace />} />
-          </Routes>
+                </ProtectedRoute>
+              } />
+              <Route path="/" element={<Navigate to="/pos" replace />} />
+            </Routes>
+          </Suspense>
+          <Toaster />
         </PrinterProvider>
       </AuthProvider>
     </Router>

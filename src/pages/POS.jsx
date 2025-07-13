@@ -49,13 +49,19 @@ export default function POS() {
     const grouped = filtered.reduce((acc, product) => {
       const categoryName = product.category_name || 'Lainnya'
       const brandName = product.brand || 'No Brand'
-      if (!acc[categoryName]) acc[categoryName] = {}
-      if (!acc[categoryName][brandName]) acc[categoryName][brandName] = []
+      
+      if (!acc[categoryName]) {
+        acc[categoryName] = {}
+      }
+      if (!acc[categoryName][brandName]) {
+        acc[categoryName][brandName] = []
+      }
       acc[categoryName][brandName].push(product)
       return acc
     }, {})
+
     setGroupedProducts(grouped)
-  }, [products, selectedCategory, searchTerm])
+  }, [products, searchTerm, selectedCategory])
 
   const loadInitialData = async () => {
     try {
@@ -64,154 +70,138 @@ export default function POS() {
         productService.getProducts(),
         productService.getCategories()
       ])
-      setProducts(productsData || [])
-      setCategories(categoriesData || [])
+      setProducts(productsData)
+      setCategories(categoriesData)
     } catch (error) {
+      console.error('Error loading data:', error)
       toast.error('Gagal memuat data')
-      console.error(error)
     } finally {
       setLoading(false)
     }
   }
 
   const handleAddToCart = (product) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id)
-      if (existing) {
-        if (existing.quantity >= product.current_stock) {
-          toast.error('Stok tidak mencukupi')
-          return prev
-        }
-        toast.success('Quantity ditambah')
-        return prev.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        )
+    const existingItem = cart.find(item => item.id === product.id)
+    
+    if (existingItem) {
+      if (existingItem.quantity >= product.current_stock) {
+        toast.error('Stok tidak mencukupi')
+        return
       }
-      toast.success('Produk ditambahkan ke keranjang')
-      return [...prev, { ...product, quantity: 1, discount: 0, discountType: 'amount' }]
-    })
+      setCart(prev => prev.map(item => 
+        item.id === product.id 
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ))
+    } else {
+      setCart(prev => [...prev, { ...product, quantity: 1, discount: 0, discount_type: 'amount' }])
+    }
+    toast.success(`${product.name} ditambahkan ke keranjang`)
   }
 
   const handleUpdateQuantity = (productId, newQuantity) => {
-    if (newQuantity < 1) {
-      handleRemoveItem(productId);
-      return;
+    if (newQuantity === 0) {
+      setCart(prev => prev.filter(item => item.id !== productId))
+      return
     }
-    
-    const productInCart = cart.find(p => p.id === productId);
-    if (newQuantity > productInCart.current_stock) {
-      toast.error('Stok tidak mencukupi');
-      return;
+
+    const product = products.find(p => p.id === productId)
+    if (newQuantity > product.current_stock) {
+      toast.error('Stok tidak mencukupi')
+      return
     }
-    
-    setCart(prev =>
-      prev.map(item =>
-        item.id === productId
-          ? { ...item, quantity: newQuantity }
-          : item
-      )
-    )
+
+    setCart(prev => prev.map(item =>
+      item.id === productId ? { ...item, quantity: newQuantity } : item
+    ))
   }
 
   const handleUpdateItemDiscount = (productId, discount, discountType) => {
-    setCart(prev =>
-      prev.map(item =>
-        item.id === productId
-          ? { ...item, discount, discountType }
-          : item
-      )
-    )
+    setCart(prev => prev.map(item =>
+      item.id === productId 
+        ? { ...item, discount: discount || 0, discount_type: discountType || 'amount' }
+        : item
+    ))
   }
 
   const handleRemoveItem = (productId) => {
     setCart(prev => prev.filter(item => item.id !== productId))
-    toast.success('Produk dihapus dari keranjang')
   }
 
-  const handleCheckout = () => {
+  const handleCheckout = async (paymentData) => {
     if (cart.length === 0) {
       toast.error('Keranjang kosong')
       return
     }
-    setShowCheckout(true)
-  }
 
-  // ========================================================================
-  // INILAH FUNGSI YANG DIPERBAIKI
-  // ========================================================================
-  const handleConfirmCheckout = async (paymentDetails) => {
-    const checkoutToastId = toast.loading('Memproses transaksi...');
     try {
-      // 1. Membuat satu objek 'transactionData' yang rapi.
-      // Ini menggabungkan detail dari modal checkout, ID kasir, dan diskon global.
       const transactionData = {
-        ...paymentDetails, // Berisi customer_name, amount_paid, dll.
+        items: cart.map(item => ({
+          product_id: item.id,
+          quantity: item.quantity,
+          price: item.selling_price,
+          discount: item.discount || 0,
+          discount_type: item.discount_type || 'amount'
+        })),
         cashier_id: employee.id,
-        // Nama properti `discount_amount` di sini harus sesuai dengan yang diharapkan
-        // oleh service, yang kemudian akan menjadi `p_discount_amount_global` di RPC.
-        discount_amount: paymentDetails.discount_amount || 0,
-      };
-
-      // 2. Memanggil service dengan DUA argumen yang benar dan sesuai urutan:
-      // Argumen pertama: objekData. Argumen kedua: arrayItem.
-      const result = await transactionService.createTransaction(
-        transactionData,
-        cart
-      );
-      
-      toast.success(`Transaksi berhasil! No: ${result.transaction_number}`, { id: checkoutToastId });
-
-      // Logika untuk cetak struk tidak perlu diubah
-      if (isPrinterConnected) {
-        toast.loading('Mencetak struk...', { id: 'printing-toast' });
-        try {
-          // Siapkan data untuk struk
-          const subtotal = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
-          const totalItemDiscount = cart.reduce((sum, item) => {
-            const itemSubtotal = item.selling_price * item.quantity;
-            const discount = item.discountType === 'percentage' ? (itemSubtotal * (item.discount || 0) / 100) : (item.discount || 0);
-            return sum + discount;
-          }, 0);
-          const finalTotal = subtotal - totalItemDiscount - (paymentDetails.discount_amount || 0);
-
-          const receiptDetails = {
-              transactionNumber: result.transaction_number,
-              subtotal,
-              totalDiscount: totalItemDiscount + (paymentDetails.discount_amount || 0),
-              finalTotal,
-              ...paymentDetails
-          };
-          
-          await printReceipt(cart, receiptDetails, employee.name);
-          toast.success('Struk berhasil dikirim ke printer.', { id: 'printing-toast' });
-        } catch (printError) {
-          toast.error(`Struk gagal dicetak: ${printError.message}`, { id: 'printing-toast' });
-          console.error("Print error after transaction:", printError);
-        }
-      } else {
-        toast.error("Printer tidak terhubung, struk tidak dicetak.", { duration: 5000 });
+        discount_amount: globalDiscount,
+        payment_method: paymentData.payment_method,
+        amount_paid: paymentData.amount_paid,
+        customer_name: paymentData.customer_name || null,
+        customer_phone: paymentData.customer_phone || null,
+        customer_address: paymentData.customer_address || null,
+        notes: paymentData.notes || null
       }
 
-      // Reset state setelah semua berhasil
-      setCart([]);
-      setGlobalDiscount(0);
-      setGlobalDiscountType('amount');
-      setShowCheckout(false);
-      setShowMobileCart(false);
-      loadInitialData(); // Muat ulang data untuk update stok di UI
+      const result = await transactionService.createTransaction(transactionData)
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Transaksi gagal')
+      }
+
+      toast.success('Transaksi berhasil!')
+
+      // Print receipt if printer connected
+      if (isPrinterConnected) {
+        try {
+          const receiptData = {
+            id: result.transaction_id,
+            transaction_number: result.transaction_number,
+            cashier_name: employee.name,
+            transaction_date: new Date().toISOString(),
+            transaction_items: cart,
+            subtotal: cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0),
+            discount_amount: globalDiscount,
+            total_amount: result.total,
+            amount_paid: paymentData.amount_paid,
+            change_amount: paymentData.amount_paid - result.total,
+            customer_name: paymentData.customer_name,
+            customer_phone: paymentData.customer_phone,
+            customer_address: paymentData.customer_address,
+            notes: paymentData.notes
+          }
+
+          await printReceipt(receiptData)
+          toast.success('Struk berhasil dicetak!')
+        } catch (printError) {
+          toast.error('Struk gagal dicetak')
+          console.error("Print error:", printError)
+        }
+      }
+
+      // Reset state
+      setCart([])
+      setGlobalDiscount(0)
+      setGlobalDiscountType('amount')
+      setShowCheckout(false)
+      setShowMobileCart(false)
+      loadInitialData()
       
     } catch (error) {
-      // Jika ada error dari mana pun, akan ditangkap di sini
-      toast.error(`Transaksi gagal: ${error.message}`, { id: checkoutToastId });
-      console.error("Checkout failed:", error); 
+      toast.error(`Transaksi gagal: ${error.message}`)
+      console.error("Checkout failed:", error)
     }
   }
-  // ========================================================================
-  // AKHIR DARI FUNGSI YANG DIPERBAIKI
-  // ========================================================================
-
 
   const handleAddExpense = async (expenseData) => {
     try {
@@ -220,13 +210,11 @@ export default function POS() {
         created_by: employee.id
       })
       setShowExpense(false)
+      toast.success('Pengeluaran berhasil ditambahkan')
     } catch (error) {
+      toast.error('Gagal menambahkan pengeluaran')
       throw error
     }
-  }
-
-  const getCartItemCount = () => {
-    return cart.reduce((sum, item) => sum + item.quantity, 0)
   }
 
   if (loading) {
@@ -244,17 +232,15 @@ export default function POS() {
     <div className="min-h-screen bg-gray-100">
       <Header employee={employee} onLogout={logout} />
       
-      <div className="flex h-[calc(100vh-4rem)] relative">
+      <div className="flex h-[calc(100vh-4rem)]">
         <div className="flex-1 p-2 md:p-4 overflow-y-auto">
-          <div className="mb-3 md:mb-4 space-y-2">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowExpense(true)}
-                className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium"
-              >
-                + Pengeluaran
-              </button>
-            </div>
+          <div className="mb-3 md:mb-4">
+            <button
+              onClick={() => setShowExpense(true)}
+              className="mb-3 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium"
+            >
+              + Pengeluaran
+            </button>
             
             <div className="flex flex-col md:flex-row gap-2 md:gap-3">
               <input
@@ -313,32 +299,30 @@ export default function POS() {
             onCheckout={handleCheckout}
             globalDiscount={globalDiscount}
             globalDiscountType={globalDiscountType}
-            onUpdateGlobalDiscount={(discount, type) => {
-              setGlobalDiscount(discount)
-              setGlobalDiscountType(type)
-            }}
+            onGlobalDiscountChange={setGlobalDiscount}
+            onGlobalDiscountTypeChange={setGlobalDiscountType}
           />
         </div>
 
         <button
           onClick={() => setShowMobileCart(true)}
-          className="lg:hidden fixed bottom-4 right-4 bg-blue-600 text-white rounded-full p-4 shadow-lg flex items-center justify-center z-40"
+          className="lg:hidden fixed bottom-4 right-4 bg-blue-600 text-white p-3 rounded-full shadow-lg z-10"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-          {getCartItemCount() > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center">
-              {getCartItemCount()}
+          🛒
+          {cart.length > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+              {cart.reduce((sum, item) => sum + item.quantity, 0)}
             </span>
           )}
         </button>
+      </div>
 
-        {showMobileCart && (
-          <div className="lg:hidden fixed inset-0 bg-white z-50 flex flex-col">
-            <div className="bg-white shadow-sm p-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Keranjang</h2>
-              <button onClick={() => setShowMobileCart(false)} className="text-gray-500 hover:text-gray-700">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+      {showMobileCart && (
+        <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex">
+          <div className="bg-white w-full max-w-md ml-auto h-full overflow-hidden">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Keranjang</h2>
+              <button onClick={() => setShowMobileCart(false)}>✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <Cart
@@ -346,29 +330,30 @@ export default function POS() {
                 onUpdateQuantity={handleUpdateQuantity}
                 onUpdateItemDiscount={handleUpdateItemDiscount}
                 onRemoveItem={handleRemoveItem}
-                onCheckout={handleCheckout}
+                onCheckout={(data) => {
+                  setShowMobileCart(false)
+                  handleCheckout(data)
+                }}
                 globalDiscount={globalDiscount}
                 globalDiscountType={globalDiscountType}
-                onUpdateGlobalDiscount={(discount, type) => {
-                  setGlobalDiscount(discount)
-                  setGlobalDiscountType(type)
-                }}
+                onGlobalDiscountChange={setGlobalDiscount}
+                onGlobalDiscountTypeChange={setGlobalDiscountType}
               />
             </div>
           </div>
-        )}
-      </div>
-      
+        </div>
+      )}
+
       {showCheckout && (
         <CheckoutModal
           cart={cart}
+          onClose={() => setShowCheckout(false)}
+          onConfirm={handleCheckout}
           globalDiscount={globalDiscount}
           globalDiscountType={globalDiscountType}
-          onConfirm={handleConfirmCheckout}
-          onClose={() => setShowCheckout(false)}
         />
       )}
-      
+
       {showExpense && (
         <ExpenseModal
           onClose={() => setShowExpense(false)}

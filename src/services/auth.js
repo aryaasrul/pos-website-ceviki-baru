@@ -3,22 +3,30 @@ import { supabase } from './supabase'
 export const authService = {
   async login(email, password) {
     try {
-      // Sign in with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim().toLowerCase(),
         password
       })
       
-      if (authError) throw authError
+      if (authError) {
+        throw new Error(authError.message)
+      }
+
+      if (!authData.user) {
+        throw new Error('Login gagal')
+      }
       
-      // Get employee data
       const { data: employee, error: employeeError } = await supabase
         .from('employees')
         .select('*')
-        .eq('email', email)
+        .eq('id', authData.user.id)
+        .eq('active', true)
         .single()
       
-      if (employeeError) throw employeeError
+      if (employeeError || !employee) {
+        await supabase.auth.signOut()
+        throw new Error('Data karyawan tidak ditemukan')
+      }
       
       return {
         user: authData.user,
@@ -26,7 +34,6 @@ export const authService = {
         session: authData.session
       }
     } catch (error) {
-      console.error('Login error:', error)
       throw error
     }
   },
@@ -36,23 +43,25 @@ export const authService = {
     if (error) throw error
   },
 
-  async getCurrentSession() {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session
-  },
-
   async getCurrentUser() {
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return null
-    
-    const { data: employee } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-    
-    return { user, employee }
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) return null
+
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('id', user.id)
+        .eq('active', true)
+        .single()
+      
+      if (!employee) return null
+      
+      return { user, employee }
+    } catch (error) {
+      return null
+    }
   },
 
   onAuthStateChange(callback) {

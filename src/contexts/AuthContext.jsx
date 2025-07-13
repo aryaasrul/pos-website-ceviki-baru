@@ -10,43 +10,48 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    checkUser()
+    let mounted = true
     
-    const { data: { subscription } } = authService.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN') {
-          checkUser()
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null)
-          setEmployee(null)
+    const initializeAuth = async () => {
+      try {
+        const data = await authService.getCurrentUser()
+        
+        if (mounted) {
+          if (data?.user && data?.employee) {
+            setUser(data.user)
+            setEmployee(data.employee)
+          }
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error)
+        if (mounted) {
+          setLoading(false)
         }
       }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const checkUser = async () => {
-    try {
-      setLoading(true)
-      const data = await authService.getCurrentUser()
-      if (data) {
-        setUser(data.user)
-        setEmployee(data.employee)
-      }
-    } catch (error) {
-      console.error('Error checking user:', error)
-    } finally {
-      setLoading(false)
     }
-  }
+
+    // Force stop loading after 3 seconds
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        setLoading(false)
+      }
+    }, 3000)
+
+    initializeAuth()
+
+    return () => {
+      mounted = false
+      clearTimeout(timeoutId)
+    }
+  }, [])
 
   const login = async (email, password) => {
     try {
       const data = await authService.login(email, password)
       setUser(data.user)
       setEmployee(data.employee)
-      toast.success('Login berhasil!')
+      toast.success('Login berhasil')
       return data
     } catch (error) {
       toast.error(error.message || 'Login gagal')
@@ -57,12 +62,11 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await authService.logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
       setUser(null)
       setEmployee(null)
-      toast.success('Logout berhasil')
-    } catch (error) {
-      toast.error('Logout gagal')
-      throw error
     }
   }
 
@@ -72,7 +76,7 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && !!employee,
     isOwner: employee?.role === 'owner',
     isKasir: employee?.role === 'kasir'
   }

@@ -18,10 +18,12 @@ export default function Login() {
       return
     }
 
+    if (loading) return
+
     try {
       setLoading(true)
       await login(email, password)
-      navigate('/pos')
+      navigate('/')
     } catch (error) {
       console.error('Login error:', error)
     } finally {
@@ -32,7 +34,10 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center mb-6">Login POS Toko</h2>
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">POS System</h1>
+          <p className="text-gray-600 mt-2">Silakan login untuk melanjutkan</p>
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -43,9 +48,10 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="email@example.com"
               disabled={loading}
+              required
             />
           </div>
           
@@ -57,18 +63,26 @@ export default function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="••••••••"
               disabled={loading}
+              required
             />
           </div>
           
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Loading...' : 'Login'}
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Logging in...
+              </div>
+            ) : (
+              'Login'
+            )}
           </button>
         </form>
       </div>
