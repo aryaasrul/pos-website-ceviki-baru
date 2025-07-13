@@ -1,10 +1,97 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import { productService } from '../services/products'
-import { formatCurrency } from '../utils/formatters'
-import Header from '../components/layout/Header'
-import toast from 'react-hot-toast'
-import { supabase } from '../services/supabase'
+import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { productService } from '../services/products';
+import { formatCurrency, formatDate } from '../utils/formatters'; // Menambahkan formatDate
+import Header from '../components/layout/Header';
+import toast from 'react-hot-toast';
+import { supabase } from '../services/supabase';
+import { stockHistoryService } from '../services/stockHistory'; // Import service baru
+
+// --- Komponen Modal Riwayat Stok ---
+// Ditempatkan di sini agar sesuai dengan struktur kode Anda
+function StockHistoryModal({ product, onClose }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!product) return;
+      try {
+        setLoading(true);
+        const data = await stockHistoryService.getStockHistory(product.id);
+        setHistory(data);
+      } catch (error) {
+        toast.error('Gagal memuat riwayat stok.');
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [product]);
+
+  const getTypeClass = (type) => {
+    switch (type) {
+      case 'sale': return 'bg-red-100 text-red-800';
+      case 'adjustment':
+      case 'stock_in': return 'bg-green-100 text-green-800';
+      case 'return': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="p-5 border-b">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Riwayat Stok</h2>
+              <p className="text-sm text-gray-600">{product.name} ({product.sku})</p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <div className="p-5 overflow-y-auto">
+          {loading ? (
+            <div className="text-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div><p className="mt-4 text-gray-600">Memuat...</p></div>
+          ) : history.length === 0 ? (
+            <div className="text-center py-10"><p className="text-gray-500">Tidak ada riwayat pergerakan stok.</p></div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jenis</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Jumlah</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Catatan</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Oleh</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {history.map((item) => (
+                  <tr key={item.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{formatDate(item.created_at, true)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeClass(item.type)}`}>{item.type.replace('_', ' ')}</span></td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-green-600'}`}>{item.quantity}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{item.notes || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.created_by_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="p-4 bg-gray-50 border-t text-right">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700">Tutup</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // --- MAIN COMPONENT ---
 export default function Products() {
@@ -18,6 +105,11 @@ export default function Products() {
   const [showStockModal, setShowStockModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
+
+  // --- PENAMBAHAN STATE UNTUK HISTORY MODAL ---
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [selectedProductForHistory, setSelectedProductForHistory] = useState(null)
+
 
   useEffect(() => {
     loadData()
@@ -48,8 +140,8 @@ export default function Products() {
   const filteredProducts = products.filter(product => {
     if (!product) return false;
     const matchSearch = product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       product.brand?.toLowerCase().includes(searchTerm.toLowerCase())
+                      product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      product.brand?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchCategory = selectedCategory === 'all' || product.category_id === selectedCategory
     return matchSearch && matchCategory
   })
@@ -68,6 +160,12 @@ export default function Products() {
     setSelectedProduct(product)
     setShowStockModal(true)
   }
+  
+  // --- PENAMBAHAN FUNGSI UNTUK MENAMPILKAN HISTORY ---
+  const handleShowHistory = (product) => {
+    setSelectedProductForHistory(product);
+    setShowHistoryModal(true);
+  };
 
   const handleDeleteProduct = async (productId) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus produk ini? Aksi ini tidak dapat dibatalkan.')) {
@@ -158,6 +256,10 @@ export default function Products() {
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{formatCurrency(product.selling_price)}</td>
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
+                          {/* --- PENAMBAHAN TOMBOL HISTORY --- */}
+                          <button onClick={() => handleShowHistory(product)} className="text-gray-500 hover:text-gray-800" title="Lihat Riwayat Stok">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v11.494m-5.747-8.247l11.494 0M4.253 12.000h15.494" transform="rotate(45 12 12)"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                          </button>
                           <button onClick={() => handleStockAdjustment(product)} className="text-green-600 hover:text-green-900" title="Penyesuaian Stok">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
                           </button>
@@ -198,6 +300,14 @@ export default function Products() {
             setShowStockModal(false)
             loadData()
           }}
+        />
+      )}
+
+      {/* --- PENAMBAHAN RENDER UNTUK HISTORY MODAL --- */}
+      {showHistoryModal && (
+        <StockHistoryModal
+          product={selectedProductForHistory}
+          onClose={() => setShowHistoryModal(false)}
         />
       )}
     </div>
