@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatters';
 // --- PENAMBAHAN IMPORT ---
 import { transactionService } from '../../services/transactions';
-import { printerService } from '../../services/printerService';
+import { bluetoothPrinterService } from '../../services/bluetoothPrinterService';
 
 // --- PENAMBAHAN PROPS 'employeeId' & 'cart' ---
 // Kita membutuhkan ini untuk menyimpan siapa yang melakukan transaksi dan apa saja itemnya

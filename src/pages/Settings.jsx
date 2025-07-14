@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/layout/Header';
 import { useAuth } from '../contexts/AuthContext';
+import { usePrinter } from '../contexts/PrinterContext';
 import { supabase } from '../services/supabase';
 import toast from 'react-hot-toast';
-import { printerService } from '../services/printerService';
+
 
 /**
  * Komponen untuk halaman Pengaturan.
@@ -11,14 +12,26 @@ import { printerService } from '../services/printerService';
  */
 export default function Settings() {
   const { employee, logout, isOwner } = useAuth();
+  const { 
+    isConnected, 
+    isConnecting, 
+    isSupported, 
+    device, 
+    lastError,
+    connectPrinter, 
+    testPrint,
+    refreshStatus 
+  } = usePrinter();
+  
   const [settings, setSettings] = useState({
     shop_name: '',
     shop_address: '',
     shop_phone: '',
-    default_print_copies: 1, // Menambahkan state untuk jumlah salinan
+    default_print_copies: 1,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingPrint, setTestingPrint] = useState(false);
 
   // Mengambil data pengaturan saat komponen pertama kali dimuat
   useEffect(() => {
@@ -35,7 +48,6 @@ export default function Settings() {
           throw error;
         }
         if (data) {
-          // Memastikan semua state terisi dengan data dari DB atau nilai default
           setSettings({
             shop_name: data.shop_name || '',
             shop_address: data.shop_address || '',
@@ -51,12 +63,12 @@ export default function Settings() {
     };
 
     fetchSettings();
-  }, []);
+    refreshStatus(); // Refresh printer status
+  }, [refreshStatus]);
 
   // Menangani perubahan pada input form
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    // Untuk input angka, pastikan nilainya valid
     const val = name === 'default_print_copies' ? Math.max(1, parseInt(value, 10) || 1) : value;
     setSettings(prev => ({ ...prev, [name]: val }));
   };
@@ -85,26 +97,80 @@ export default function Settings() {
     }
   };
 
-  // Menjalankan tes cetak struk
-  const handleTestPrint = () => {
-    toast.success('Mencoba mencetak struk tes...');
-    const testTransaction = {
-      id: 'test-print-id',
-      transaction_number: 'TEST-001',
-      cashier_name: employee?.name || 'Admin',
-      transaction_date: new Date().toISOString(),
-      transaction_items: [
-        { name: 'Item Tes 1', quantity: 1, unit_price: 10000 },
-        { name: 'Item Tes 2', quantity: 2, unit_price: 5000 },
-      ],
-      total_amount: 20000,
-      discount_amount: 0,
-      amount_paid: 20000,
-      change_amount: 0,
-    };
-    // Memanggil service printer (sekarang akan mencetak sesuai jumlah salinan)
-    printerService.printReceipt(testTransaction);
+  // Handle test print
+  const handleTestPrint = async () => {
+    if (!isConnected) {
+      toast.error('Printer belum terhubung. Silakan hubungkan printer terlebih dahulu.');
+      return;
+    }
+
+    setTestingPrint(true);
+    try {
+      await testPrint();
+    } catch (error) {
+      // Error sudah ditangani di context
+    } finally {
+      setTestingPrint(false);
+    }
   };
+
+  // Handle connect printer
+  const handleConnectPrinter = async () => {
+    if (!isSupported) {
+      toast.error('Browser tidak mendukung Bluetooth. Gunakan Chrome/Edge terbaru.');
+      return;
+    }
+    
+    await connectPrinter();
+  };
+
+  // Get printer connection status display
+  const getPrinterStatus = () => {
+    if (!isSupported) {
+      return {
+        text: 'Browser tidak mendukung Bluetooth',
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        icon: '❌'
+      };
+    }
+    
+    if (isConnecting) {
+      return {
+        text: 'Menghubungkan...',
+        color: 'text-yellow-600',
+        bgColor: 'bg-yellow-50',
+        icon: '🔄'
+      };
+    }
+    
+    if (isConnected) {
+      return {
+        text: `Terhubung ke ${device?.name || 'Printer Bluetooth'}`,
+        color: 'text-green-600',
+        bgColor: 'bg-green-50',
+        icon: '✅'
+      };
+    }
+    
+    if (lastError) {
+      return {
+        text: `Error: ${lastError}`,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        icon: '⚠️'
+      };
+    }
+    
+    return {
+      text: 'Printer belum terhubung',
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-50',
+      icon: '🖨️'
+    };
+  };
+
+  const printerStatus = getPrinterStatus();
 
   if (loading) {
     return (
@@ -127,7 +193,9 @@ export default function Settings() {
             <h2 className="text-xl font-semibold border-b pb-3 mb-4">Informasi Toko</h2>
             <div className="space-y-4">
               <div>
-                <label htmlFor="shop_name" className="block text-sm font-medium text-gray-700">Nama Toko</label>
+                <label htmlFor="shop_name" className="block text-sm font-medium text-gray-700">
+                  Nama Toko
+                </label>
                 <input
                   type="text"
                   id="shop_name"
@@ -138,7 +206,9 @@ export default function Settings() {
                 />
               </div>
               <div>
-                <label htmlFor="shop_address" className="block text-sm font-medium text-gray-700">Alamat Toko</label>
+                <label htmlFor="shop_address" className="block text-sm font-medium text-gray-700">
+                  Alamat Toko
+                </label>
                 <textarea
                   id="shop_address"
                   name="shop_address"
@@ -149,7 +219,9 @@ export default function Settings() {
                 ></textarea>
               </div>
               <div>
-                <label htmlFor="shop_phone" className="block text-sm font-medium text-gray-700">No. Telepon Toko</label>
+                <label htmlFor="shop_phone" className="block text-sm font-medium text-gray-700">
+                  No. Telepon Toko
+                </label>
                 <input
                   type="text"
                   id="shop_phone"
@@ -164,11 +236,65 @@ export default function Settings() {
 
           {/* Bagian Pengaturan Printer */}
           <div className="bg-white p-6 rounded-lg shadow mb-6">
-            <h2 className="text-xl font-semibold border-b pb-3 mb-4">Pengaturan Printer</h2>
-            <div className="space-y-4">
+            <h2 className="text-xl font-semibold border-b pb-3 mb-4">Pengaturan Printer Bluetooth</h2>
+            <div className="space-y-6">
+              
+              {/* Status Printer */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Status Koneksi Printer
+                </label>
+                <div className={`p-3 rounded-md ${printerStatus.bgColor} border`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{printerStatus.icon}</span>
+                    <span className={`text-sm font-medium ${printerStatus.color}`}>
+                      {printerStatus.text}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tombol Koneksi */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Koneksi Printer
+                </label>
+                <div className="flex gap-3">
+                  {!isConnected ? (
+                    <button
+                      type="button"
+                      onClick={handleConnectPrinter}
+                      disabled={isConnecting || !isSupported}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {isConnecting ? 'Menghubungkan...' : 'Hubungkan Printer'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleTestPrint}
+                      disabled={testingPrint}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:bg-gray-400"
+                    >
+                      {testingPrint ? 'Mencetak...' : 'Cetak Struk Tes'}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {!isSupported 
+                    ? 'Gunakan browser Chrome atau Edge terbaru untuk fitur Bluetooth.'
+                    : isConnected 
+                    ? 'Gunakan tombol tes untuk memastikan printer berfungsi dengan baik.'
+                    : 'Pastikan printer thermal Bluetooth Anda dalam mode pairing.'
+                  }
+                </p>
+              </div>
+
               {/* Input untuk jumlah salinan struk */}
               <div>
-                <label htmlFor="default_print_copies" className="block text-sm font-medium text-gray-700">Jumlah Salinan Struk Default</label>
+                <label htmlFor="default_print_copies" className="block text-sm font-medium text-gray-700">
+                  Jumlah Salinan Struk Default
+                </label>
                 <input
                   type="number"
                   id="default_print_copies"
@@ -176,21 +302,25 @@ export default function Settings() {
                   value={settings.default_print_copies}
                   onChange={handleInputChange}
                   min="1"
+                  max="5"
                   className="mt-1 block w-full max-w-xs px-3 py-2 border rounded-md shadow-sm focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">Jumlah struk yang otomatis tercetak setiap transaksi berhasil.</p>
-              </div>
-              <div className="border-t pt-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  Gunakan tombol di bawah ini untuk memastikan printer struk Anda terhubung dan berfungsi dengan baik.
+                <p className="text-xs text-gray-500 mt-1">
+                  Jumlah struk yang otomatis tercetak setiap transaksi berhasil (maksimal 5 salinan).
                 </p>
-                <button
-                  type="button"
-                  onClick={handleTestPrint}
-                  className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  Cetak Struk Tes
-                </button>
+              </div>
+
+              {/* Info Compatibility */}
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                <h3 className="text-sm font-medium text-blue-800 mb-2">
+                  ℹ️ Persyaratan Printer Bluetooth
+                </h3>
+                <ul className="text-xs text-blue-700 space-y-1">
+                  <li>• Gunakan printer thermal yang mendukung ESC/POS commands</li>
+                  <li>• Pastikan printer dalam mode Bluetooth pairing</li>
+                  <li>• Browser: Chrome/Edge versi terbaru (mendukung Web Bluetooth)</li>
+                  <li>• Kertas: 58mm atau 80mm thermal paper</li>
+                </ul>
               </div>
             </div>
           </div>

@@ -67,26 +67,18 @@ export const reportService = {
 
   async getReportData(startDate, endDate) {
     try {
-      // Get transactions
+      // Get transactions dengan join yang specific
       const { data: transactions, error: txError } = await supabase
         .from('transactions')
         .select(`
-          *,
-          transaction_items (
-            quantity,
-            unit_price,
-            cost_price,
-            discount_amount,
-            subtotal,
-            product:products (
-              id,
-              name,
-              sku
-            )
-          ),
-          cashier:employees (
-            name
-          )
+          id,
+          transaction_number,
+          transaction_date,
+          total_amount,
+          discount_amount,
+          payment_method,
+          cashier_id,
+          payment_status
         `)
         .gte('transaction_date', startDate)
         .lte('transaction_date', endDate)
@@ -94,6 +86,71 @@ export const reportService = {
         .order('transaction_date', { ascending: false })
 
       if (txError) throw txError
+
+      // Early return if no transactions
+      if (!transactions || transactions.length === 0) {
+        return {
+          totalRevenue: 0,
+          totalCost: 0,
+          totalExpenses: 0,
+          totalDiscount: 0,
+          grossProfit: 0,
+          netProfit: 0,
+          profitPercentage: 0,
+          totalTransactions: 0,
+          totalExpenseCount: 0,
+          totalProductsSold: 0,
+          uniqueProducts: 0,
+          chartData: [],
+          topProducts: [],
+          expenseBreakdown: [],
+          transactions: [],
+          expenses: []
+        }
+      }
+
+      // Get transaction items separately
+      const transactionIds = transactions.map(tx => tx.id)
+      const { data: transactionItems, error: itemsError } = await supabase
+        .from('transaction_items')
+        .select(`
+          transaction_id,
+          quantity,
+          unit_price,
+          cost_price,
+          discount_amount,
+          subtotal,
+          product_id
+        `)
+        .in('transaction_id', transactionIds)
+
+      if (itemsError) throw itemsError
+
+      // Get products for the items
+      const productIds = [...new Set(transactionItems?.map(item => item.product_id) || [])]
+      let products = []
+      if (productIds.length > 0) {
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('id, name, sku')
+          .in('id', productIds)
+
+        if (productsError) throw productsError
+        products = productsData || []
+      }
+
+      // Get employees/cashiers
+      const cashierIds = [...new Set(transactions.map(tx => tx.cashier_id))]
+      let employees = []
+      if (cashierIds.length > 0) {
+        const { data: employeesData, error: empError } = await supabase
+          .from('employees')
+          .select('id, name')
+          .in('id', cashierIds)
+
+        if (empError) throw empError
+        employees = employeesData || []
+      }
 
       // Get expenses
       const { data: expenses, error: expError } = await supabase
@@ -105,6 +162,35 @@ export const reportService = {
 
       if (expError) throw expError
 
+      // Create lookup maps
+      const productMap = {}
+      products.forEach(p => {
+        productMap[p.id] = p
+      })
+
+      const employeeMap = {}
+      employees.forEach(e => {
+        employeeMap[e.id] = e
+      })
+
+      const itemsByTransaction = {}
+      transactionItems?.forEach(item => {
+        if (!itemsByTransaction[item.transaction_id]) {
+          itemsByTransaction[item.transaction_id] = []
+        }
+        itemsByTransaction[item.transaction_id].push({
+          ...item,
+          product: productMap[item.product_id] || { id: item.product_id, name: 'Unknown Product', sku: '-' }
+        })
+      })
+
+      // Merge data back together
+      const enrichedTransactions = transactions.map(tx => ({
+        ...tx,
+        cashier: employeeMap[tx.cashier_id] || { id: tx.cashier_id, name: 'Unknown Cashier' },
+        transaction_items: itemsByTransaction[tx.id] || []
+      }))
+
       // Calculate summaries
       let totalRevenue = 0
       let totalCost = 0
@@ -113,23 +199,24 @@ export const reportService = {
       const productStats = {}
       const dailyStats = {}
 
-      transactions.forEach(tx => {
-        totalRevenue += tx.total_amount
+      enrichedTransactions.forEach(tx => {
+        totalRevenue += tx.total_amount || 0
         totalDiscount += tx.discount_amount || 0
 
         // Format date for daily stats
         const date = new Date(tx.transaction_date).toISOString().split('T')[0]
         if (!dailyStats[date]) {
-          dailyStats[date] = { revenue: 0, cost: 0, transactions: 0 }
+          dailyStats[date] = { revenue: 0, cost: 0, transactions: 0, expenses: 0 }
         }
-        dailyStats[date].revenue += tx.total_amount
+        dailyStats[date].revenue += tx.total_amount || 0
         dailyStats[date].transactions += 1
 
         // Process items
         tx.transaction_items?.forEach(item => {
-          totalCost += (item.cost_price * item.quantity)
-          totalProductsSold += item.quantity
-          dailyStats[date].cost += (item.cost_price * item.quantity)
+          const itemCost = (item.cost_price || 0) * (item.quantity || 0)
+          totalCost += itemCost
+          totalProductsSold += item.quantity || 0
+          dailyStats[date].cost += itemCost
 
           // Track product stats
           if (item.product) {
@@ -145,9 +232,9 @@ export const reportService = {
                 profit: 0
               }
             }
-            productStats[productId].quantity += item.quantity
-            productStats[productId].revenue += item.subtotal
-            productStats[productId].cost += (item.cost_price * item.quantity)
+            productStats[productId].quantity += item.quantity || 0
+            productStats[productId].revenue += item.subtotal || 0
+            productStats[productId].cost += itemCost
             productStats[productId].profit = productStats[productId].revenue - productStats[productId].cost
           }
         })
@@ -157,8 +244,8 @@ export const reportService = {
       let totalExpenses = 0
       const expenseBreakdown = {}
       
-      expenses.forEach(expense => {
-        totalExpenses += expense.amount
+      expenses?.forEach(expense => {
+        totalExpenses += expense.amount || 0
         
         if (!expenseBreakdown[expense.category]) {
           expenseBreakdown[expense.category] = {
@@ -167,30 +254,32 @@ export const reportService = {
             count: 0
           }
         }
-        expenseBreakdown[expense.category].total += expense.amount
+        expenseBreakdown[expense.category].total += expense.amount || 0
         expenseBreakdown[expense.category].count += 1
 
         // Add to daily stats
         const date = new Date(expense.expense_date).toISOString().split('T')[0]
         if (!dailyStats[date]) {
-          dailyStats[date] = { revenue: 0, cost: 0, transactions: 0 }
+          dailyStats[date] = { revenue: 0, cost: 0, transactions: 0, expenses: 0 }
         }
-        if (!dailyStats[date].expenses) dailyStats[date].expenses = 0
-        dailyStats[date].expenses += expense.amount
+        dailyStats[date].expenses += expense.amount || 0
       })
 
       // Calculate profit
       const grossProfit = totalRevenue - totalCost
       const netProfit = grossProfit - totalExpenses
-      const profitPercentage = totalRevenue > 0 ? (netProfit / totalRevenue * 100).toFixed(2) : 0
+      const profitPercentage = totalRevenue > 0 ? 
+        ((netProfit / totalRevenue) * 100).toFixed(2) : 0
 
       // Prepare chart data
-      const chartData = Object.entries(dailyStats).map(([date, stats]) => ({
-        date: new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
-        revenue: stats.revenue,
-        expenses: stats.expenses || 0,
-        profit: stats.revenue - stats.cost - (stats.expenses || 0)
-      }))
+      const chartData = Object.entries(dailyStats)
+        .map(([date, stats]) => ({
+          date: new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
+          revenue: stats.revenue,
+          expenses: stats.expenses || 0,
+          profit: stats.revenue - stats.cost - (stats.expenses || 0)
+        }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
 
       // Get top products
       const topProducts = Object.values(productStats)
@@ -198,21 +287,23 @@ export const reportService = {
         .slice(0, 10)
 
       // Calculate expense percentages
-      const expenseArray = Object.values(expenseBreakdown).map(exp => ({
-        ...exp,
-        percentage: ((exp.total / totalExpenses) * 100).toFixed(1)
-      })).sort((a, b) => b.total - a.total)
+      const expenseArray = Object.values(expenseBreakdown)
+        .map(exp => ({
+          ...exp,
+          percentage: totalExpenses > 0 ? ((exp.total / totalExpenses) * 100).toFixed(1) : '0.0'
+        }))
+        .sort((a, b) => b.total - a.total)
 
       // Format transactions for display
-      const formattedTransactions = transactions.map(tx => ({
+      const formattedTransactions = enrichedTransactions.map(tx => ({
         id: tx.id,
         transaction_number: tx.transaction_number,
         transaction_date: tx.transaction_date,
         cashier_name: tx.cashier?.name || 'Unknown',
-        total_items: tx.transaction_items?.reduce((sum, item) => sum + item.quantity, 0) || 0,
-        total_amount: tx.total_amount,
+        total_items: tx.transaction_items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0,
+        total_amount: tx.total_amount || 0,
         profit: tx.transaction_items?.reduce((sum, item) => 
-          sum + ((item.unit_price - item.cost_price) * item.quantity), 0) || 0
+          sum + (((item.unit_price || 0) - (item.cost_price || 0)) * (item.quantity || 0)), 0) || 0
       }))
 
       return {
@@ -223,15 +314,15 @@ export const reportService = {
         grossProfit,
         netProfit,
         profitPercentage,
-        totalTransactions: transactions.length,
-        totalExpenseCount: expenses.length,
+        totalTransactions: enrichedTransactions.length,
+        totalExpenseCount: expenses?.length || 0,
         totalProductsSold,
         uniqueProducts: Object.keys(productStats).length,
         chartData,
         topProducts,
         expenseBreakdown: expenseArray,
         transactions: formattedTransactions,
-        expenses
+        expenses: expenses || []
       }
     } catch (error) {
       console.error('Error getting report data:', error)
