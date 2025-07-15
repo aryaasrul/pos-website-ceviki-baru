@@ -1,4 +1,9 @@
-import React, { createContext, useContext, useReducer, useMemo } from 'react';
+// ================================================
+// FIX PRINTER CONTEXT - PRODUCTION READY
+// File: src/contexts/PrinterContext.jsx
+// ================================================
+
+import React, { createContext, useContext, useReducer } from 'react';
 import { bluetoothPrinterService } from '../services/bluetoothPrinterService';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
@@ -73,7 +78,7 @@ export const usePrinter = () => {
  */
 export function PrinterProvider({ children }) {
   const [state, dispatch] = useReducer(printerReducer, initialState);
-  const { employee } = useAuth(); // Get current employee for logging
+  const { employee } = useAuth();
 
   /**
    * Ambil shop info dari database
@@ -192,7 +197,7 @@ export function PrinterProvider({ children }) {
       console.error("Error printing receipt:", error);
       const errorMsg = `Gagal mencetak struk: ${error.message}`;
       
-      // Log error print ke database
+      // Log error print ke database jika diperlukan
       if (transaction.id !== 'test-print-id') {
         try {
           await supabase.from('print_logs').insert({
@@ -202,221 +207,44 @@ export function PrinterProvider({ children }) {
             copies_printed: 0,
             success: false,
             error_message: error.message,
-            printer_info: state.device ? {
-              name: state.device.name,
-              id: state.device.id,
-              connection_type: 'bluetooth'
-            } : null
+            printer_info: state.device ? JSON.stringify(state.device) : null
           });
         } catch (logError) {
           console.error('Failed to log print error:', logError);
         }
       }
       
-      dispatch({ type: 'SET_ERROR', payload: errorMsg });
       toast.error(errorMsg);
-      throw error;
+      throw new Error(errorMsg);
     }
   };
 
   /**
-   * Fungsi untuk mencetak salinan struk
-   */
-  const printCopy = async (transaction) => {
-    if (!state.isConnected) {
-      const errorMsg = "Printer belum terhubung. Silakan hubungkan terlebih dahulu.";
-      toast.error(errorMsg);
-      throw new Error("Printer not connected");
-    }
-
-    try {
-      const shopInfo = await getShopInfo();
-      
-      // Tandai sebagai salinan
-      const copyTransaction = {
-        ...transaction,
-        isCopy: true
-      };
-      
-      toast('Mencetak salinan struk...', { icon: '🖨️' });
-      
-      await bluetoothPrinterService.printReceipt(copyTransaction, shopInfo, 1);
-      
-      // Log print copy ke database
-      await incrementPrintCount(transaction.id, 'copy', 1);
-      
-      toast.success('Salinan struk berhasil dicetak!');
-      return true;
-
-    } catch (error) {
-      console.error("Error printing copy:", error);
-      const errorMsg = `Gagal mencetak salinan: ${error.message}`;
-      
-      // Log error print ke database  
-      try {
-        await supabase.from('print_logs').insert({
-          transaction_id: transaction.id,
-          printed_by: employee?.id || null,
-          print_type: 'copy',
-          copies_printed: 0,
-          success: false,
-          error_message: error.message,
-          printer_info: state.device ? {
-            name: state.device.name,
-            id: state.device.id,
-            connection_type: 'bluetooth'
-          } : null
-        });
-      } catch (logError) {
-        console.error('Failed to log print error:', logError);
-      }
-      
-      dispatch({ type: 'SET_ERROR', payload: errorMsg });
-      toast.error(errorMsg);
-      throw error;
-    }
-  };
-
-  /**
-   * Test print untuk verifikasi koneksi
+   * Test print untuk memverifikasi koneksi
    */
   const testPrint = async () => {
     if (!state.isConnected) {
-      const errorMsg = "Printer belum terhubung. Silakan hubungkan terlebih dahulu.";
-      toast.error(errorMsg);
+      toast.error('Printer belum terhubung');
       return false;
     }
 
     try {
-      toast('Mencetak struk tes...', { icon: '🖨️' });
-      
+      toast('Testing printer...', { icon: '🧪' });
       await bluetoothPrinterService.testPrint();
-      
-      // Log test print ke database (tanpa transaction_id)
-      try {
-        await supabase.from('print_logs').insert({
-          transaction_id: null, // Test print tidak punya transaction
-          printed_by: employee?.id || null,
-          print_type: 'test',
-          copies_printed: 1,
-          success: true,
-          printer_info: state.device ? {
-            name: state.device.name,
-            id: state.device.id,
-            connection_type: 'bluetooth'
-          } : null
-        });
-      } catch (logError) {
-        console.error('Failed to log test print:', logError);
-        // Don't fail the test print if logging fails
-      }
-      
-      toast.success('Tes cetak berhasil!');
+      toast.success('Test print berhasil!');
       return true;
-
     } catch (error) {
-      console.error("Test print failed:", error);
-      const errorMsg = `Tes cetak gagal: ${error.message}`;
-      
-      // Log test print error
-      try {
-        await supabase.from('print_logs').insert({
-          transaction_id: null,
-          printed_by: employee?.id || null,
-          print_type: 'test',
-          copies_printed: 0,
-          success: false,
-          error_message: error.message,
-          printer_info: state.device ? {
-            name: state.device.name,
-            id: state.device.id,
-            connection_type: 'bluetooth'
-          } : null
-        });
-      } catch (logError) {
-        console.error('Failed to log test print error:', logError);
-      }
-      
-      dispatch({ type: 'SET_ERROR', payload: errorMsg });
-      toast.error(errorMsg);
+      console.error('Test print error:', error);
+      toast.error(`Test print gagal: ${error.message}`);
       return false;
     }
   };
 
   /**
-   * Update print count di database menggunakan function yang sudah dibuat
-   */
-  const incrementPrintCount = async (transactionId, printType = 'receipt', copiesPrinted = 1) => {
-    try {
-      // Get current employee ID untuk logging
-      const employeeId = employee?.id || null;
-      
-      // Get device info untuk logging
-      const deviceInfo = state.device ? {
-        name: state.device.name,
-        id: state.device.id,
-        connection_type: 'bluetooth'
-      } : null;
-
-      // Call database function
-      const { data, error } = await supabase.rpc('increment_print_count', {
-        p_transaction_id: transactionId,
-        p_printed_by: employeeId,
-        p_print_type: printType,
-        p_copies_printed: copiesPrinted,
-        p_printer_info: deviceInfo
-      });
-
-      if (error) throw error;
-      
-      if (!data) {
-        console.warn('Print count increment failed but no error thrown');
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error updating print count:', error);
-      
-      // Fallback: try direct update if function fails
-      try {
-        const { error: fallbackError } = await supabase
-          .from('transactions')
-          .update({ 
-            print_count: supabase.raw('print_count + ' + copiesPrinted),
-            last_printed_at: new Date().toISOString()
-          })
-          .eq('id', transactionId);
-          
-        if (fallbackError) throw fallbackError;
-        console.log('Fallback print count update successful');
-      } catch (fallbackErr) {
-        console.error('Fallback print count update also failed:', fallbackErr);
-      }
-      
-      // Don't throw error to avoid breaking print flow
-      return false;
-    }
-  };
-
-  /**
-   * Fungsi untuk mengecek status printer
-   */
-  const checkPrinterStatus = () => {
-    return {
-      isSupported: state.isSupported,
-      isConnected: state.isConnected,
-      isConnecting: state.isConnecting,
-      device: state.device,
-      lastError: state.lastError
-    };
-  };
-
-  /**
-   * Refresh status koneksi
+   * Refresh printer status
    */
   const refreshStatus = () => {
     const status = bluetoothPrinterService.getStatus();
-    
     if (status.isConnected !== state.isConnected) {
       if (status.isConnected) {
         dispatch({ 
@@ -429,17 +257,44 @@ export function PrinterProvider({ children }) {
     }
   };
 
-  // Memoized value untuk context
-  const contextValue = useMemo(() => ({
-    ...state,
+  /**
+   * Helper function untuk increment print count
+   */
+  const incrementPrintCount = async (transactionId, printType, copies) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ 
+          print_count: supabase.raw('COALESCE(print_count, 0) + ?', [copies]),
+          last_printed_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
+
+      if (error) {
+        console.error('Failed to update print count:', error);
+      }
+    } catch (error) {
+      console.error('Error incrementing print count:', error);
+    }
+  };
+
+  // Context value
+  const contextValue = {
+    // State
+    isConnected: state.isConnected,
+    isConnecting: state.isConnecting,
+    isSupported: state.isSupported,
+    device: state.device,
+    lastError: state.lastError,
+    
+    // Actions
     connectPrinter,
     disconnectPrinter,
     printReceipt,
-    printCopy,
     testPrint,
-    checkPrinterStatus,
-    refreshStatus
-  }), [state]);
+    refreshStatus,
+    getShopInfo
+  };
 
   return (
     <PrinterContext.Provider value={contextValue}>
