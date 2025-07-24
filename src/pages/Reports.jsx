@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { reportService } from '../services/reports';
-import { transactionService } from '../services/transactions'; // Untuk piutang
+import { transactionService } from '../services/transactions';
+import exportService from '../services/exportService';
+import transactionEditService from '../services/transactionEditService';
+import EditTransactionModal from '../components/transactions/EditTransactionModal';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import Header from '../components/layout/Header';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
+import { Edit, Clock, User } from 'lucide-react';
 
 // --- KOMPONEN MODAL UNTUK PEMBAYARAN PIUTANG ---
 const PaymentModal = ({ transaction, onClose, onPaymentSuccess }) => {
@@ -84,6 +88,35 @@ export default function Reports() {
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // State for edit functionality
+  const [editableTransactions, setEditableTransactions] = useState([]);
+  const [selectedEditTransaction, setSelectedEditTransaction] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+
+  // Check if user is owner
+  useEffect(() => {
+    const checkOwnerRole = async () => {
+      const ownerRole = await transactionEditService.checkOwnerRole();
+      setIsOwner(ownerRole);
+    };
+    checkOwnerRole();
+  }, []);
+
+  // Fetch editable transactions
+  const fetchEditableTransactions = useCallback(async () => {
+    if (!isOwner) return;
+      setLoading(true);
+    try {
+      const data = await transactionEditService.getEditableTransactions(50);
+      setEditableTransactions(data);
+    } catch (error) {
+      toast.error('Gagal memuat transaksi yang bisa diedit');
+    } finally {
+      setLoading(false);
+    }
+  }, [isOwner]);
+
   const handleGenerateReport = useCallback(async () => {
     try {
       setLoading(true);
@@ -125,18 +158,81 @@ export default function Reports() {
   useEffect(() => {
     if (activeTab === 'piutang') {
       fetchUnpaidTransactions();
+    } else if (activeTab === 'edit' && isOwner) {
+      fetchEditableTransactions();
     } else {
       handleGenerateReport();
     }
-  }, [activeTab, dateRange, fetchUnpaidTransactions, handleGenerateReport]);
+  }, [activeTab, dateRange, fetchUnpaidTransactions, handleGenerateReport, fetchEditableTransactions, isOwner]);
+
+  // Handle edit transaction
+  const handleEditTransaction = (transactionId) => {
+    setSelectedEditTransaction(transactionId);
+    setShowEditModal(true);
+  };
+
+  const handleEditSuccess = () => {
+    toast.success('Transaksi berhasil diedit');
+    if (activeTab === 'edit') {
+      fetchEditableTransactions();
+    } else {
+      // Refresh the main report if an item from there was edited
+      handleGenerateReport();
+    }
+  };
 
 
   const handleDateChange = (field, value) => {
     setDateRange(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleExportPDF = () => toast.success('Fitur export PDF akan segera hadir');
-  const handleExportExcel = () => toast.success('Fitur export Excel akan segera hadir');
+  // Updated export functions
+  const handleExportPDF = useCallback(() => {
+    try {
+      if (activeTab === 'piutang') {
+        if (unpaid.length === 0) {
+          toast.error('Tidak ada data piutang untuk di-export');
+          return;
+        }
+        exportService.exportUnpaidToPDF(unpaid);
+        toast.success('Laporan piutang berhasil di-export ke PDF');
+      } else {
+        if (!reportData) {
+          toast.error('Tidak ada data laporan untuk di-export');
+          return;
+        }
+        exportService.exportReportToPDF(reportData, activeTab, dateRange);
+        toast.success('Laporan berhasil di-export ke PDF');
+      }
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Gagal export PDF: ' + error.message);
+    }
+  }, [activeTab, reportData, unpaid, dateRange]);
+
+  const handleExportExcel = useCallback(() => {
+    try {
+      if (activeTab === 'piutang') {
+        if (unpaid.length === 0) {
+          toast.error('Tidak ada data piutang untuk di-export');
+          return;
+        }
+        exportService.exportUnpaidToExcel(unpaid);
+        toast.success('Laporan piutang berhasil di-export ke Excel');
+      } else {
+        if (!reportData) {
+          toast.error('Tidak ada data laporan untuk di-export');
+          return;
+        }
+        exportService.exportReportToExcel(reportData, activeTab, dateRange);
+        toast.success('Laporan berhasil di-export ke Excel');
+      }
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      toast.error('Gagal export Excel: ' + error.message);
+    }
+  }, [activeTab, reportData, unpaid, dateRange]);
+
   const calculateProfit = () => !reportData ? 0 : reportData.totalRevenue - reportData.totalCost - reportData.totalExpenses;
   const calculateMargin = () => !reportData || reportData.totalRevenue === 0 ? 0 : ((reportData.totalRevenue - reportData.totalCost) / reportData.totalRevenue * 100).toFixed(2);
   
@@ -153,7 +249,7 @@ export default function Reports() {
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="border-b">
             <nav className="flex flex-wrap">
-              {['daily', 'weekly', 'monthly', 'custom', 'piutang'].map((tab) => (
+              {['daily', 'weekly', 'monthly', 'custom', 'piutang', ...(isOwner ? ['edit'] : [])].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -163,13 +259,13 @@ export default function Reports() {
                       : 'text-gray-500 border-transparent hover:text-gray-700'
                   }`}
                 >
-                  {tab}
+                  {tab === 'edit' ? 'Edit Transaksi' : tab}
                 </button>
               ))}
             </nav>
           </div>
           
-          {activeTab !== 'piutang' && (
+          {activeTab !== 'piutang' && activeTab !== 'edit' && (
             <div className="p-4">
               <div className="flex flex-col md:flex-row gap-4 items-end">
                 <div className="flex-1">
@@ -196,8 +292,65 @@ export default function Reports() {
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button onClick={handleExportPDF} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium">Export PDF</button>
-                  <button onClick={handleExportExcel} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium">Export Excel</button>
+                  <button 
+                    onClick={handleExportPDF} 
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export PDF
+                  </button>
+                  <button 
+                    onClick={handleExportExcel} 
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Export buttons for Piutang tab */}
+          {activeTab === 'piutang' && (
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-medium text-gray-900">Data Piutang</h2>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleExportPDF} 
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export PDF
+                  </button>
+                  <button 
+                    onClick={handleExportExcel} 
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Header for Edit tab */}
+          {activeTab === 'edit' && isOwner && (
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-medium text-gray-900">Edit Transaksi</h2>
+                  <p className="text-sm text-gray-600">Transaksi dalam 24 jam terakhir yang dapat diedit</p>
                 </div>
               </div>
             </div>
@@ -207,11 +360,11 @@ export default function Reports() {
         {loading && (
           <div className="text-center py-10">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Memuat laporan...</p>
+            <p className="mt-4 text-gray-600">Memuat data...</p>
           </div>
         )}
         
-        {activeTab !== 'piutang' && !loading && reportData && (
+        {activeTab !== 'piutang' && activeTab !== 'edit' && !loading && reportData && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 <div className="bg-white p-4 rounded-lg shadow"><p className="text-sm font-medium text-gray-500">Total Penjualan</p><p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(reportData.totalRevenue || 0)}</p><p className="text-xs text-green-600 mt-1">{reportData.totalTransactions || 0} transaksi</p></div>
@@ -239,10 +392,19 @@ export default function Reports() {
                                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Items</th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Laba</th>
+                                {isOwner && (
+                                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {transactions.map((tx) => (
+                            {transactions.map((tx) => {
+                              const transactionDate = new Date(tx.transaction_date);
+                              const now = new Date();
+                              const hoursDiff = (now - transactionDate) / (1000 * 60 * 60);
+                              const canEdit = isOwner && hoursDiff <= 24 && tx.payment_status !== 'partial';
+                                
+                              return (
                                 <tr key={tx.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 text-sm">{tx.transaction_number}</td>
                                     <td className="px-4 py-3 text-sm">{formatDate(tx.transaction_date)}</td>
@@ -250,8 +412,28 @@ export default function Reports() {
                                     <td className="px-4 py-3 text-sm text-center">{tx.total_items}</td>
                                     <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(tx.total_amount)}</td>
                                     <td className="px-4 py-3 text-sm text-right font-medium text-green-600">{formatCurrency(tx.profit || 0)}</td>
+                                    {isOwner && (
+                                      <td className="px-4 py-3 text-center">
+                                        {canEdit ? (
+                                          <button
+                                            onClick={() => handleEditTransaction(tx.id)}
+                                            className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs flex items-center gap-1 mx-auto"
+                                            title="Edit Transaksi"
+                                          >
+                                            <Edit size={12} />
+                                            Edit
+                                          </button>
+                                        ) : (
+                                          <span className="text-xs text-gray-400 flex items-center gap-1 justify-center" title="Tidak bisa diedit">
+                                            <Clock size={12} />
+                                            {hoursDiff > 24 ? 'Expired' : 'Terkunci'}
+                                          </span>
+                                        )}
+                                      </td>
+                                    )}
                                 </tr>
-                            ))}
+                              );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -307,6 +489,65 @@ export default function Reports() {
           </>
         )}
 
+        {/* Edit Transactions Tab */}
+        {activeTab === 'edit' && isOwner && !loading && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. Transaksi</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kasir</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {editableTransactions.length > 0 ? (
+                    editableTransactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">{tx.transaction_number}</td>
+                        <td className="px-4 py-3 text-sm">{formatDate(tx.transaction_date)}</td>
+                        <td className="px-4 py-3 text-sm flex items-center gap-2">
+                          <User size={14} className="text-gray-400" />
+                          {tx.cashier_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(tx.total_amount)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${
+                            tx.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                            tx.payment_status === 'unpaid' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {tx.payment_status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleEditTransaction(tx.id)}
+                            className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs flex items-center gap-1 mx-auto"
+                          >
+                            <Edit size={12} />
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="text-center py-10 text-gray-500">
+                        Tidak ada transaksi yang bisa diedit saat ini.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'piutang' && !loading && (
           <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -356,6 +597,19 @@ export default function Reports() {
           transaction={selectedTransaction}
           onClose={() => setSelectedTransaction(null)}
           onPaymentSuccess={fetchUnpaidTransactions}
+        />
+      )}
+
+      {/* Edit Transaction Modal */}
+      {showEditModal && selectedEditTransaction && (
+        <EditTransactionModal
+          transactionId={selectedEditTransaction}
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedEditTransaction(null);
+          }}
+          onSuccess={handleEditSuccess}
         />
       )}
     </div>
