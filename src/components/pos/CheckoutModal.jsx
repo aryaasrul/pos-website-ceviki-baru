@@ -157,7 +157,7 @@ export default function CheckoutModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Jumlah Bayar <span className="text-red-500">*</span></label>
-                <input type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Masukkan jumlah pembayaran" min="0" step="1000" disabled={loading}/>
+                <input type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Masukkan jumlah pembayaran" min="0" step="1" disabled={loading}/>
               </div>
             </div>
             <div>

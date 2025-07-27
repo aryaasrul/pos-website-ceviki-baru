@@ -248,7 +248,7 @@ export default function ProductModal({ product, categories, onSave, onClose }) {
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0"
                     min="0"
-                    step="1000"
+                    step="1"
                   />
                 </div>
               </div>
@@ -271,7 +271,7 @@ export default function ProductModal({ product, categories, onSave, onClose }) {
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0"
                     min="0"
-                    step="1000"
+                    step="1"
                     required
                   />
                 </div>
