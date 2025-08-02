@@ -88,7 +88,7 @@ class TransactionEditService {
         throw new Error('Transaksi tidak ditemukan');
       }
 
-      // Get transaction items
+      // Get transaction items with complete product information
       const { data: items } = await supabase
         .from('transaction_items')
         .select(`
@@ -97,9 +97,16 @@ class TransactionEditService {
         `)
         .eq('transaction_id', transactionId);
 
+      // Ensure items have all required fields including product_name
+      const processedItems = (items || []).map(item => ({
+        ...item,
+        product_name: item.product_name || item.product?.name || 'Unknown Product',
+        product: item.product
+      }));
+
       return {
         transaction,
-        items: items || []
+        items: processedItems
       };
     } catch (error) {
       console.error('Error getting transaction for edit:', error);
@@ -121,15 +128,41 @@ class TransactionEditService {
         throw new Error('User not authenticated');
       }
 
-      // Prepare items data for the stored procedure
-      const itemsJson = editData.items.map(item => ({
+      // Get product information for items that might be missing product_name
+      const itemsWithProductInfo = await Promise.all(
+        editData.items.map(async (item) => {
+          let productName = item.product_name;
+          
+          // If product_name is missing, fetch it from products table
+          if (!productName) {
+            const { data: product } = await supabase
+              .from('products')
+              .select('name')
+              .eq('id', item.product_id)
+              .single();
+            
+            productName = product?.name || 'Unknown Product';
+          }
+
+          return {
+            ...item,
+            product_name: productName
+          };
+        })
+      );
+
+      // Prepare items data for the stored procedure with all required fields
+      const itemsJson = itemsWithProductInfo.map(item => ({
         product_id: item.product_id,
+        product_name: item.product_name, // FIX: Added product_name
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal: item.quantity * item.unit_price,
         discount_amount: item.discount_amount || 0,
         discount_type: item.discount_type || 'amount'
       }));
+
+      console.log('📝 Items being sent to stored procedure:', itemsJson);
 
       // Call the stored procedure
       const { data, error } = await supabase.rpc('edit_transaction', {
@@ -140,13 +173,16 @@ class TransactionEditService {
       });
 
       if (error) {
+        console.error('❌ Stored procedure error:', error);
         throw new Error(error.message);
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to edit transaction');
+      if (!data || !data.success) {
+        console.error('❌ Transaction edit failed:', data);
+        throw new Error(data?.error || 'Failed to edit transaction');
       }
 
+      console.log('✅ Transaction edited successfully:', data);
       return data;
     } catch (error) {
       console.error('Error editing transaction:', error);
