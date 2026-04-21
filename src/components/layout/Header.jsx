@@ -23,6 +23,7 @@ const Header = ({ employee, onLogout }) => {
   const ownerMenuItems = [
     { path: '/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/products', label: 'Kelola Produk', icon: '📦' },
+    { path: '/transactions', label: 'Transaksi', icon: '🧾' },
     { path: '/reports', label: 'Laporan', icon: '📄' },
     { path: '/statistics', label: 'Statistik', icon: '📈' },
     { path: '/employees', label: 'Kelola Karyawan', icon: '👥' },

@@ -18,9 +18,6 @@ export default function Dashboard() {
   const [weeklyData, setWeeklyData] = useState([])
   const [topProducts, setTopProducts] = useState([])
 
-  // Debug log
-  console.log('Dashboard - Employee:', employee)
-
   useEffect(() => {
     loadDashboardData()
   }, [])
@@ -81,7 +78,7 @@ export default function Dashboard() {
   }
 
   const calculateNetIncome = () => {
-    return (dailySales?.total_sales || 0) - calculateTotalExpenses()
+    return (dailySales?.total_revenue || 0) - calculateTotalExpenses()
   }
 
   const getLowStockProducts = () => {
@@ -117,7 +114,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-gray-500">Total Penjualan</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(dailySales?.total_sales || 0)}
+                  {formatCurrency(dailySales?.total_revenue || 0)}
                 </p>
               </div>
               <div className="p-3 bg-green-100 rounded-full">
@@ -165,7 +162,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Margin: {((calculateNetIncome() / (dailySales?.total_sales || 1)) * 100).toFixed(1)}%
+              Margin: {((calculateNetIncome() / (dailySales?.total_revenue || 1)) * 100).toFixed(1)}%
             </p>
           </div>
           

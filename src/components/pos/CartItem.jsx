@@ -6,9 +6,9 @@ const CartItem = ({ item, onUpdateQuantity, onUpdateItemDiscount, onRemoveItem }
   
   // Calculate item totals
   const itemSubtotal = item.selling_price * item.quantity
-  const discountAmount = item.discountType === 'percentage'
-    ? (itemSubtotal * item.discount / 100)
-    : item.discount
+  const discountAmount = item.discount_type === 'percentage'
+    ? (itemSubtotal * (item.discount || 0) / 100)
+    : (item.discount || 0)
   const itemTotal = itemSubtotal - discountAmount
 
   return (
@@ -76,7 +76,7 @@ const CartItem = ({ item, onUpdateQuantity, onUpdateItemDiscount, onRemoveItem }
         {showDiscount && (
           <div className="mt-2 flex gap-2">
             <select
-              value={item.discountType}
+              value={item.discount_type || 'amount'}
               onChange={(e) => onUpdateItemDiscount(item.id, item.discount, e.target.value)}
               className="text-xs border rounded px-1 py-1"
             >
@@ -85,11 +85,11 @@ const CartItem = ({ item, onUpdateQuantity, onUpdateItemDiscount, onRemoveItem }
             </select>
             <input
               type="number"
-              value={item.discount}
-              onChange={(e) => onUpdateItemDiscount(item.id, Number(e.target.value) || 0, item.discountType)}
+              value={item.discount || 0}
+              onChange={(e) => onUpdateItemDiscount(item.id, Number(e.target.value) || 0, item.discount_type || 'amount')}
               placeholder="0"
               min="0"
-              max={item.discountType === 'percentage' ? 100 : itemSubtotal}
+              max={item.discount_type === 'percentage' ? 100 : itemSubtotal}
               className="flex-1 text-xs border rounded px-2 py-1"
             />
           </div>

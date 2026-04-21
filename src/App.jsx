@@ -17,6 +17,7 @@ const Reports = lazyPreload(() => import('./pages/Reports'))
 const Statistics = lazyPreload(() => import('./pages/Statistics'))
 const Employees = lazyPreload(() => import('./pages/Employees'))
 const Settings = lazyPreload(() => import('./pages/Settings'))
+const Transactions = lazyPreload(() => import('./pages/Transactions'))
 
 // Loading component yang bagus
 const PageLoader = () => (
@@ -83,6 +84,11 @@ function App() {
               <Route path="/settings" element={
                 <ProtectedRoute requireOwner>
                   <Settings />
+                </ProtectedRoute>
+              } />
+              <Route path="/transactions" element={
+                <ProtectedRoute requireOwner>
+                  <Transactions />
                 </ProtectedRoute>
               } />
               <Route path="/" element={<Navigate to="/pos" replace />} />

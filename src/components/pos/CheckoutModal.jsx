@@ -32,8 +32,8 @@ export default function CheckoutModal({
     const subtotal = cart.reduce((sum, item) => sum + item.selling_price * item.quantity, 0);
     const totalItemDiscount = cart.reduce((sum, item) => {
       const itemSubtotal = item.selling_price * item.quantity;
-      const discount = item.discountType === 'percentage' 
-        ? (itemSubtotal * (item.discount || 0) / 100) 
+      const discount = item.discount_type === 'percentage'
+        ? (itemSubtotal * (item.discount || 0) / 100)
         : (item.discount || 0);
       return sum + discount;
     }, 0);

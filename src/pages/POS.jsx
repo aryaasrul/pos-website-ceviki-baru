@@ -131,14 +131,15 @@ export default function POS() {
         })),
         cashier_id: employee.id,
         discount_amount_global: globalDiscount,
+        global_discount_type: globalDiscountType,
         payment_method: checkoutData.payment_method,
         amount_paid: checkoutData.amount_paid,
+        tax_percent: checkoutData.tax_percent,
         customer_name: checkoutData.customer_name,
         customer_phone: checkoutData.customer_phone,
         customer_address: checkoutData.customer_address,
         customer_email: checkoutData.customer_email,
-        notes: checkoutData.notes,
-        tax_percent: checkoutData.tax_percent
+        notes: checkoutData.notes
       };
 
       const result = await transactionService.createTransaction(transactionPayload);

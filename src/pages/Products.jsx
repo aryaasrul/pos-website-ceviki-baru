@@ -52,8 +52,8 @@ export default function Products() {
   };
 
   const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (product.sku || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = !selectedCategory || product.category_id === selectedCategory;
     const matchesStock = !showStockOnly || product.current_stock > 0;

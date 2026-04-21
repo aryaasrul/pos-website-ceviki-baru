@@ -2,24 +2,25 @@ import React, { useState } from 'react'
 import CartItem from './CartItem'
 import { formatCurrency } from '../../utils/formatters'
 
-const Cart = ({ 
-  items, 
-  onUpdateQuantity, 
+const Cart = ({
+  items,
+  onUpdateQuantity,
   onUpdateItemDiscount,
-  onRemoveItem, 
+  onRemoveItem,
   onCheckout,
   globalDiscount,
   globalDiscountType,
-  onUpdateGlobalDiscount
+  onGlobalDiscountChange,
+  onGlobalDiscountTypeChange
 }) => {
   const [showGlobalDiscount, setShowGlobalDiscount] = useState(false)
-  
+
   // Calculate subtotal
   const subtotal = items.reduce((sum, item) => {
     const itemSubtotal = item.selling_price * item.quantity
-    const itemDiscount = item.discountType === 'percentage' 
+    const itemDiscount = item.discount_type === 'percentage'
       ? (itemSubtotal * item.discount / 100)
-      : item.discount
+      : (item.discount || 0)
     return sum + (itemSubtotal - itemDiscount)
   }, 0)
   
@@ -79,7 +80,7 @@ const Cart = ({
                 <div className="flex gap-2">
                   <select
                     value={globalDiscountType}
-                    onChange={(e) => onUpdateGlobalDiscount(globalDiscount, e.target.value)}
+                    onChange={(e) => onGlobalDiscountTypeChange(e.target.value)}
                     className="text-sm border rounded px-2 py-1"
                   >
                     <option value="amount">Rp</option>
@@ -88,7 +89,7 @@ const Cart = ({
                   <input
                     type="number"
                     value={globalDiscount}
-                    onChange={(e) => onUpdateGlobalDiscount(Number(e.target.value) || 0, globalDiscountType)}
+                    onChange={(e) => onGlobalDiscountChange(Number(e.target.value) || 0)}
                     placeholder="0"
                     min="0"
                     max={globalDiscountType === 'percentage' ? 100 : subtotal}

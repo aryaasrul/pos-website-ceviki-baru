@@ -49,8 +49,10 @@ const createTransaction = async (transactionData) => {
       p_items: formattedItems,
       p_cashier_id: transactionData.cashier_id,
       p_discount_amount_global: parseFloat(transactionData.discount_amount_global || 0),
+      p_global_discount_type: transactionData.global_discount_type || 'amount',
       p_payment_method: transactionData.payment_method || 'cash',
       p_amount_paid: parseFloat(transactionData.amount_paid || 0),
+      p_tax_percent: parseFloat(transactionData.tax_percent || 0),
       p_customer_name: transactionData.customer_name.trim(),
       p_customer_phone: transactionData.customer_phone.trim(),
       p_customer_address: transactionData.customer_address.trim(),
@@ -242,8 +244,7 @@ const addPayment = async (transactionId, amount, method = 'cash', notes = null) 
       .update({
         amount_paid: newAmountPaid,
         remaining_balance: Math.max(newRemainingBalance, 0),
-        payment_status: newPaymentStatus,
-        updated_at: new Date().toISOString()
+        payment_status: newPaymentStatus
       })
       .eq('id', transactionId)
       .select()
