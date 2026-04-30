@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { transactionService } from '../services/transactions'
 import { productService } from '../services/products'
 import { expenseService } from '../services/expenses'
+import { reportService } from '../services/reports'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import Header from '../components/layout/Header'
 import toast from 'react-hot-toast'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 export default function Dashboard() {
   const { employee, logout } = useAuth()
@@ -20,58 +21,40 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData()
-  }, [])
+  }, [loadDashboardData])
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true)
-      const [salesData, transactionsData, expensesData, productsData] = await Promise.all([
+      const [salesData, transactionsData, expensesData, productsData, weeklyReport] = await Promise.all([
         transactionService.getDailySales(),
         transactionService.getTodayTransactions(),
         expenseService.getTodayExpenses(),
-        productService.getProducts()
+        productService.getProducts(),
+        reportService.getWeeklyReport(new Date().toISOString())
       ])
-      
+
       setDailySales(salesData)
       setTransactions(transactionsData)
       setExpenses(expensesData)
       setProducts(productsData)
-      
-      // Generate weekly data for chart
-      generateWeeklyData()
-      
-      // Get top selling products
-      generateTopProducts(transactionsData)
+
+      const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
+      setWeeklyData(weeklyReport.chartData || [])
+      setTopProducts(
+        (weeklyReport.topProducts || []).slice(0, 5).map((p, i) => ({
+          name: p.name,
+          value: p.quantity,
+          color: CHART_COLORS[i % CHART_COLORS.length]
+        }))
+      )
     } catch (error) {
       toast.error('Gagal memuat data dashboard')
       console.error(error)
     } finally {
       setLoading(false)
     }
-  }
-
-  const generateWeeklyData = () => {
-    // Dummy data - replace with actual API call
-    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
-    const data = days.map((day, index) => ({
-      day,
-      sales: Math.floor(Math.random() * 10000000) + 5000000,
-      expenses: Math.floor(Math.random() * 2000000) + 500000
-    }))
-    setWeeklyData(data)
-  }
-
-  const generateTopProducts = (transactions) => {
-    // Dummy data - replace with actual calculation from transactions
-    const products = [
-      { name: 'AC Sharp 1 PK', value: 15, color: '#3B82F6' },
-      { name: 'TV Samsung 32"', value: 12, color: '#10B981' },
-      { name: 'Kulkas LG 2 Pintu', value: 8, color: '#F59E0B' },
-      { name: 'Meja Kayu', value: 20, color: '#EF4444' },
-      { name: 'Kursi Plastik', value: 45, color: '#8B5CF6' }
-    ]
-    setTopProducts(products)
-  }
+  }, [])
 
   const calculateTotalExpenses = () => {
     return expenses.reduce((sum, expense) => sum + expense.amount, 0)
@@ -195,10 +178,10 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={weeklyData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="day" />
+                  <XAxis dataKey="date" />
                   <YAxis tickFormatter={(value) => `${(value / 1000000).toFixed(0)}jt`} />
                   <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Line type="monotone" dataKey="sales" stroke="#3B82F6" strokeWidth={2} name="Penjualan" />
+                  <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} name="Penjualan" />
                   <Line type="monotone" dataKey="expenses" stroke="#EF4444" strokeWidth={2} name="Pengeluaran" />
                 </LineChart>
               </ResponsiveContainer>

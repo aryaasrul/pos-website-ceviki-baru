@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { productService } from '../services/products'
 import toast from 'react-hot-toast'
 
@@ -8,18 +8,13 @@ export function useProducts(filters = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadProducts()
-  }, [filters])
+  // Serialize filters to string to avoid object reference inequality triggering infinite re-renders
+  const filtersKey = JSON.stringify(filters)
 
-  useEffect(() => {
-    loadCategories()
-  }, [])
-
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await productService.getProducts(filters)
+      const data = await productService.getProducts(JSON.parse(filtersKey))
       setProducts(data)
       setError(null)
     } catch (err) {
@@ -28,7 +23,15 @@ export function useProducts(filters = {}) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filtersKey])
+
+  useEffect(() => {
+    loadProducts()
+  }, [loadProducts])
+
+  useEffect(() => {
+    loadCategories()
+  }, [])
 
   const loadCategories = async () => {
     try {
@@ -50,12 +53,5 @@ export function useProducts(filters = {}) {
     }
   }
 
-  return {
-    products,
-    categories,
-    loading,
-    error,
-    refetch: loadProducts,
-    updateStock
-  }
+  return { products, categories, loading, error, refetch: loadProducts, updateStock }
 }

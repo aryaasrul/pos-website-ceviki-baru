@@ -271,15 +271,15 @@ export const reportService = {
       const profitPercentage = totalRevenue > 0 ? 
         ((netProfit / totalRevenue) * 100).toFixed(2) : 0
 
-      // Prepare chart data
+      // Prepare chart data - sort by ISO date first, then format for display
       const chartData = Object.entries(dailyStats)
+        .sort(([a], [b]) => new Date(a) - new Date(b))
         .map(([date, stats]) => ({
           date: new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
           revenue: stats.revenue,
           expenses: stats.expenses || 0,
           profit: stats.revenue - stats.cost - (stats.expenses || 0)
         }))
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
 
       // Get top products
       const topProducts = Object.values(productStats)

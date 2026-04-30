@@ -11,11 +11,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true
-    
+
     const initializeAuth = async () => {
       try {
         const data = await authService.getCurrentUser()
-        
         if (mounted) {
           if (data?.user && data?.employee) {
             setUser(data.user)
@@ -25,24 +24,34 @@ export function AuthProvider({ children }) {
         }
       } catch (error) {
         console.error('Auth initialization error:', error)
-        if (mounted) {
-          setLoading(false)
-        }
+        if (mounted) setLoading(false)
       }
     }
 
-    // Force stop loading after 3 seconds
     const timeoutId = setTimeout(() => {
-      if (mounted) {
-        setLoading(false)
-      }
+      if (mounted) setLoading(false)
     }, 3000)
 
     initializeAuth()
 
+    const { data: { subscription } } = authService.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null)
+        setEmployee(null)
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        const data = await authService.getCurrentUser()
+        if (mounted && data?.user && data?.employee) {
+          setUser(data.user)
+          setEmployee(data.employee)
+        }
+      }
+    })
+
     return () => {
       mounted = false
       clearTimeout(timeoutId)
+      subscription.unsubscribe()
     }
   }, [])
 

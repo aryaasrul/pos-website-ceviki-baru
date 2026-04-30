@@ -8,7 +8,8 @@ class TransactionEditService {
    */
   async checkOwnerRole() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
       if (!user) return false;
 
       const { data: employee } = await supabase
@@ -123,7 +124,8 @@ class TransactionEditService {
    */
   async editTransaction(transactionId, editData, editReason) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
       if (!user) {
         throw new Error('User not authenticated');
       }

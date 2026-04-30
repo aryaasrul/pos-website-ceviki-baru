@@ -281,7 +281,7 @@ const getDailySales = async (date = null) => {
       .from('transactions')
       .select('total_amount, amount_paid, payment_status')
       .gte('transaction_date', `${targetDate}T00:00:00`)
-      .lt('transaction_date', `${targetDate}T23:59:59`);
+      .lte('transaction_date', `${targetDate}T23:59:59`);
 
     if (error && error.code !== 'PGRST116') {
       throw error;

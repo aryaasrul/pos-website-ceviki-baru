@@ -66,7 +66,8 @@ export const productService = {
 
   async addStockMovement(productId, quantity, type = 'in', notes = null) {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: authData } = await supabase.auth.getUser()
+      const user = authData?.user
 
       // Trigger update_product_stock otomatis update products.current_stock
       const { error: movementError } = await supabase

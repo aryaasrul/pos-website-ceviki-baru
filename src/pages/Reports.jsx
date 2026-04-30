@@ -74,13 +74,13 @@ const PaymentModal = ({ transaction, onClose, onPaymentSuccess }) => {
 
 // --- KOMPONEN UTAMA: REPORTS ---
 export default function Reports() {
-  const { employee, logout } = useAuth();
+  const { employee, logout, isOwner } = useAuth();
   const [activeTab, setActiveTab] = useState('daily');
   const [dateRange, setDateRange] = useState({
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   });
-  
+
   const [reportData, setReportData] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -92,16 +92,6 @@ export default function Reports() {
   const [editableTransactions, setEditableTransactions] = useState([]);
   const [selectedEditTransaction, setSelectedEditTransaction] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
-
-  // Check if user is owner
-  useEffect(() => {
-    const checkOwnerRole = async () => {
-      const ownerRole = await transactionEditService.checkOwnerRole();
-      setIsOwner(ownerRole);
-    };
-    checkOwnerRole();
-  }, []);
 
   // Fetch editable transactions
   const fetchEditableTransactions = useCallback(async () => {
