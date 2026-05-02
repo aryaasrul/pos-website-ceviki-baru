@@ -19,10 +19,6 @@ export default function Dashboard() {
   const [weeklyData, setWeeklyData] = useState([])
   const [topProducts, setTopProducts] = useState([])
 
-  useEffect(() => {
-    loadDashboardData()
-  }, [loadDashboardData])
-
   const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true)
@@ -55,6 +51,10 @@ export default function Dashboard() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [loadDashboardData])
 
   const calculateTotalExpenses = () => {
     return expenses.reduce((sum, expense) => sum + expense.amount, 0)

@@ -3,7 +3,7 @@
 // File: src/contexts/PrinterContext.jsx
 // ================================================
 
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useReducer, useCallback } from 'react';
 import { bluetoothPrinterService } from '../services/bluetoothPrinterService';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
@@ -83,7 +83,7 @@ export function PrinterProvider({ children }) {
   /**
    * Ambil shop info dari database
    */
-  const getShopInfo = async () => {
+  const getShopInfo = useCallback(async () => {
     const defaults = {
       shop_name: 'POS TOKO',
       shop_address: 'Alamat Toko Anda',
@@ -105,12 +105,12 @@ export function PrinterProvider({ children }) {
       console.error('Error fetching shop info:', err);
       return defaults;
     }
-  };
+  }, []);
 
   /**
    * Fungsi untuk menghubungkan printer Bluetooth
    */
-  const connectPrinter = async () => {
+  const connectPrinter = useCallback(async () => {
     if (!state.isSupported) {
       const errorMsg = 'Browser tidak mendukung Bluetooth. Gunakan Chrome/Edge terbaru.';
       dispatch({ type: 'SET_ERROR', payload: errorMsg });
@@ -144,12 +144,12 @@ export function PrinterProvider({ children }) {
       toast.error(errorMsg);
       return false;
     }
-  };
+  }, [state.isSupported]);
 
   /**
    * Fungsi untuk memutus koneksi printer
    */
-  const disconnectPrinter = async () => {
+  const disconnectPrinter = useCallback(async () => {
     try {
       const success = await bluetoothPrinterService.disconnectPrinter();
       
@@ -165,12 +165,12 @@ export function PrinterProvider({ children }) {
       toast.error('Gagal memutus koneksi printer');
       return false;
     }
-  };
+  }, []);
 
   /**
    * Fungsi untuk mencetak struk transaksi
    */
-  const printReceipt = async (transaction) => {
+  const printReceipt = useCallback(async (transaction) => {
     if (!state.isConnected) {
       const errorMsg = "Printer belum terhubung. Silakan hubungkan terlebih dahulu.";
       toast.error(errorMsg);
@@ -217,12 +217,12 @@ export function PrinterProvider({ children }) {
       toast.error(errorMsg);
       throw new Error(errorMsg);
     }
-  };
+  }, [state.isConnected, state.device, employee, getShopInfo]);
 
   /**
    * Test print untuk memverifikasi koneksi
    */
-  const testPrint = async () => {
+  const testPrint = useCallback(async () => {
     if (!state.isConnected) {
       toast.error('Printer belum terhubung');
       return false;
@@ -238,34 +238,42 @@ export function PrinterProvider({ children }) {
       toast.error(`Test print gagal: ${error.message}`);
       return false;
     }
-  };
+  }, [state.isConnected]);
 
   /**
    * Refresh printer status
    */
-  const refreshStatus = () => {
+  const refreshStatus = useCallback(() => {
     const status = bluetoothPrinterService.getStatus();
     if (status.isConnected !== state.isConnected) {
       if (status.isConnected) {
-        dispatch({ 
-          type: 'CONNECT_SUCCESS', 
-          payload: status.device 
+        dispatch({
+          type: 'CONNECT_SUCCESS',
+          payload: status.device
         });
       } else {
         dispatch({ type: 'DISCONNECT' });
       }
     }
-  };
+  }, [state.isConnected]);
 
   /**
-   * Helper function untuk increment print count
+   * Helper function untuk increment print count (fetch then update untuk atomic increment)
    */
   const incrementPrintCount = async (transactionId, printType, copies) => {
     try {
+      const { data: tx, error: fetchError } = await supabase
+        .from('transactions')
+        .select('print_count')
+        .eq('id', transactionId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
       const { error } = await supabase
         .from('transactions')
-        .update({ 
-          print_count: supabase.raw('COALESCE(print_count, 0) + ?', [copies]),
+        .update({
+          print_count: (tx?.print_count || 0) + copies,
           last_printed_at: new Date().toISOString()
         })
         .eq('id', transactionId);

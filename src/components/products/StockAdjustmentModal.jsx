@@ -80,9 +80,9 @@ export default function StockAdjustmentModal({ product, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-        onClick={onClose}
+        onClick={loading ? undefined : onClose}
       />
       
       <div className="flex min-h-screen items-center justify-center p-4">

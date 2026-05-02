@@ -24,6 +24,7 @@ export default function Transactions() {
   const { employee, logout } = useAuth()
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateRange, setDateRange] = useState({
@@ -44,6 +45,7 @@ export default function Transactions() {
       if (statusFilter) filters.payment_status = statusFilter
       const data = await transactionService.getTransactions(filters)
       setTransactions(data)
+      setIsFirstLoad(false)
     } catch (error) {
       toast.error('Gagal memuat data transaksi')
       console.error(error)
@@ -86,6 +88,11 @@ export default function Transactions() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header employee={employee} onLogout={logout} />
+      {!isFirstLoad && loading && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-blue-200 z-50">
+          <div className="h-full bg-blue-500 animate-pulse w-full"></div>
+        </div>
+      )}
 
       <div className="p-4 md:p-6 max-w-7xl mx-auto">
         <div className="mb-6">
@@ -150,7 +157,7 @@ export default function Transactions() {
 
         {/* Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          {loading ? (
+          {isFirstLoad && loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-4 text-gray-500 text-sm">Memuat transaksi...</p>

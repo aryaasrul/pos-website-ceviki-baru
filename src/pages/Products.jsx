@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productService } from '../services/products';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,15 +25,7 @@ export default function Products() {
   const [selectedProductForHistory, setSelectedProductForHistory] = useState(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-  useEffect(() => {
-    if (!employee) {
-      navigate('/login');
-      return;
-    }
-    loadData();
-  }, [employee, navigate]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [productsData, categoriesData] = await Promise.all([
@@ -49,7 +41,15 @@ export default function Products() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!employee) {
+      navigate('/login');
+      return;
+    }
+    loadData();
+  }, [employee, navigate, loadData]);
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||

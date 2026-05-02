@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { statisticsService } from '../services/statistics'
 import { formatCurrency } from '../utils/formatters'
@@ -16,26 +16,28 @@ export default function Statistics() {
   const [period, setPeriod] = useState('month')
   const [year, setYear] = useState(new Date().getFullYear())
   const [loading, setLoading] = useState(true)
+  const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [statistics, setStatistics] = useState(null)
 
-  useEffect(() => {
-    loadStatistics()
-  }, [period, year])
-
-  const loadStatistics = async () => {
+  const loadStatistics = useCallback(async () => {
     try {
       setLoading(true)
       const data = await statisticsService.getStatistics(period, year)
       setStatistics(data)
+      setIsFirstLoad(false)
     } catch (error) {
       toast.error('Gagal memuat statistik')
       console.error(error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [period, year])
 
-  if (loading) {
+  useEffect(() => {
+    loadStatistics()
+  }, [loadStatistics])
+
+  if (isFirstLoad && loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -49,7 +51,11 @@ export default function Statistics() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header employee={employee} onLogout={logout} />
-      
+      {!isFirstLoad && loading && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-blue-200 z-50">
+          <div className="h-full bg-blue-500 animate-pulse w-full"></div>
+        </div>
+      )}
       <div className="p-4 md:p-6 max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <div>

@@ -1,12 +1,12 @@
 // src/components/transactions/EditTransactionModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Minus, AlertTriangle, Save, History } from 'lucide-react';
 import transactionEditService from '../../services/transactionEditService';
 import { formatCurrency } from '../../utils/formatters';
 import toast from 'react-hot-toast';
 
 const EditTransactionModal = ({ transactionId, isOpen, onClose, onSuccess }) => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transaction, setTransaction] = useState(null);
   const [items, setItems] = useState([]);
@@ -15,13 +15,7 @@ const EditTransactionModal = ({ transactionId, isOpen, onClose, onSuccess }) => 
   const [editHistory, setEditHistory] = useState([]);
   const [errors, setErrors] = useState([]);
 
-  useEffect(() => {
-    if (isOpen && transactionId) {
-      loadTransactionData();
-    }
-  }, [isOpen, transactionId]);
-
-  const loadTransactionData = async () => {
+  const loadTransactionData = useCallback(async () => {
     try {
       setLoading(true);
       setErrors([]);
@@ -59,7 +53,13 @@ const EditTransactionModal = ({ transactionId, isOpen, onClose, onSuccess }) => 
     } finally {
       setLoading(false);
     }
-  };
+  }, [transactionId]);
+
+  useEffect(() => {
+    if (isOpen && transactionId) {
+      loadTransactionData();
+    }
+  }, [isOpen, transactionId, loadTransactionData]);
 
   const updateItemQuantity = (index, newQuantity) => {
     if (newQuantity < 0) return;

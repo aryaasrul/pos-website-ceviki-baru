@@ -1,9 +1,21 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { formatCurrency } from '../../utils/formatters'
 
 const ProductCard = ({ brand, products, onAddToCart }) => {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
   
   // Get the first available product or first product as default
   const defaultProduct = products.find(p => p.current_stock > 0) || products[0]
@@ -59,7 +71,7 @@ const ProductCard = ({ brand, products, onAddToCart }) => {
       </div>
       
       {/* Product Models Dropdown */}
-      <div className="relative mb-2">
+      <div className="relative mb-2" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="w-full px-2 py-1.5 text-xs border rounded-md bg-gray-50 hover:bg-gray-100 flex items-center justify-between"

@@ -33,7 +33,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [testingPrint, setTestingPrint] = useState(false);
 
-  // Mengambil data pengaturan saat komponen pertama kali dimuat
+  // Fetch settings hanya sekali saat mount
   useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
@@ -43,7 +43,7 @@ export default function Settings() {
           .select('*')
           .limit(1)
           .single();
-        
+
         if (error && error.code !== 'PGRST116') {
           throw error;
         }
@@ -63,7 +63,11 @@ export default function Settings() {
     };
 
     fetchSettings();
-    refreshStatus(); // Refresh printer status
+  }, []);
+
+  // Refresh printer status terpisah supaya tidak re-fetch settings
+  useEffect(() => {
+    refreshStatus();
   }, [refreshStatus]);
 
   // Menangani perubahan pada input form

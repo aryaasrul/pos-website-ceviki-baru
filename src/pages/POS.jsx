@@ -33,6 +33,7 @@ export default function POS() {
   const [customerData, setCustomerData] = useState({
     name: '', phone: '', address: '', email: ''
   });
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => { loadInitialData() }, [])
   useEffect(() => {
@@ -67,6 +68,22 @@ export default function POS() {
       toast.error('Gagal memuat data');
     } finally {
       setLoading(false);
+    }
+  }
+
+  const refreshProductsData = async () => {
+    try {
+      setIsRefreshing(true);
+      const [productsData, categoriesData] = await Promise.all([
+        productService.getProducts(),
+        productService.getCategories()
+      ]);
+      setProducts(productsData);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsRefreshing(false);
     }
   }
 
@@ -199,7 +216,7 @@ export default function POS() {
       setCustomerData({ name: '', phone: '', address: '', email: '' });
       setShowCheckout(false);
       setShowMobileCart(false);
-      loadInitialData();
+      refreshProductsData();
       
     } catch (error) {
       toast.error(`Transaksi gagal: ${error.message}`, { id: toastId });
@@ -231,6 +248,11 @@ export default function POS() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header employee={employee} onLogout={logout} />
+      {isRefreshing && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-blue-200 z-50">
+          <div className="h-full bg-blue-500 animate-pulse w-full"></div>
+        </div>
+      )}
       <div className="flex h-[calc(100vh-4rem)]">
         <div className="flex-1 p-2 md:p-4 overflow-y-auto">
           <div className="mb-3 md:mb-4">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { employeeService } from '../services/employees'
 import { formatDate } from '../utils/formatters'
@@ -13,11 +13,7 @@ export default function Employees() {
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
 
-  useEffect(() => {
-    loadEmployees()
-  }, [])
-
-  const loadEmployees = async () => {
+  const loadEmployees = useCallback(async () => {
     try {
       setLoading(true)
       const data = await employeeService.getEmployees()
@@ -28,7 +24,11 @@ export default function Employees() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadEmployees()
+  }, [loadEmployees])
 
   const handleAddEmployee = () => {
     setEditingEmployee(null)
@@ -44,7 +44,8 @@ export default function Employees() {
     try {
       await employeeService.updateEmployeeStatus(employeeId, !currentStatus)
       toast.success('Status karyawan berhasil diubah')
-      loadEmployees()
+      const data = await employeeService.getEmployees()
+      setEmployees(data)
     } catch (error) {
       toast.error('Gagal mengubah status karyawan')
     }
