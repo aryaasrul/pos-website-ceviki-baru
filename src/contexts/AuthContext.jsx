@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { authService } from '../services/auth'
 import toast from 'react-hot-toast'
 
-const AuthContext = createContext({})
+const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -15,35 +15,47 @@ export function AuthProvider({ children }) {
     const initializeAuth = async () => {
       try {
         const data = await authService.getCurrentUser()
-        if (mounted) {
-          if (data?.user && data?.employee) {
-            setUser(data.user)
-            setEmployee(data.employee)
-          }
-          setLoading(false)
+        if (!mounted) return
+        if (data?.user && data?.employee) {
+          setUser(data.user)
+          setEmployee(data.employee)
         }
-      } catch (error) {
-        console.error('Auth initialization error:', error)
+      } catch {
+        // unauthenticated is a valid state
+      } finally {
         if (mounted) setLoading(false)
       }
     }
 
+    // Safety net in case Supabase hangs
     const timeoutId = setTimeout(() => {
       if (mounted) setLoading(false)
-    }, 3000)
+    }, 5000)
 
     initializeAuth()
 
     const { data: { subscription } } = authService.onAuthStateChange(async (event, session) => {
       if (!mounted) return
-      if (event === 'SIGNED_OUT' || !session) {
+
+      if (!session || event === 'SIGNED_OUT') {
         setUser(null)
         setEmployee(null)
-      } else if (event === 'SIGNED_IN' && session?.user) {
-        const data = await authService.getCurrentUser()
-        if (mounted && data?.user && data?.employee) {
-          setUser(data.user)
-          setEmployee(data.employee)
+        return
+      }
+
+      if (['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED'].includes(event)) {
+        try {
+          const data = await authService.getCurrentUser()
+          if (!mounted) return
+          if (data?.user && data?.employee) {
+            setUser(data.user)
+            setEmployee(data.employee)
+          } else {
+            setUser(null)
+            setEmployee(null)
+          }
+        } catch {
+          // keep existing state on transient errors
         }
       }
     })
@@ -55,7 +67,7 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     try {
       const data = await authService.login(email, password)
       setUser(data.user)
@@ -66,9 +78,9 @@ export function AuthProvider({ children }) {
       toast.error(error.message || 'Login gagal')
       throw error
     }
-  }
+  }, [])
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await authService.logout()
     } catch (error) {
@@ -77,7 +89,7 @@ export function AuthProvider({ children }) {
       setUser(null)
       setEmployee(null)
     }
-  }
+  }, [])
 
   const value = {
     user,
@@ -87,7 +99,7 @@ export function AuthProvider({ children }) {
     logout,
     isAuthenticated: !!user && !!employee,
     isOwner: employee?.role === 'owner',
-    isKasir: employee?.role === 'kasir'
+    isKasir: employee?.role === 'kasir',
   }
 
   return (
@@ -99,8 +111,6 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
   return context
 }
