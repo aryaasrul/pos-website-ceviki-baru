@@ -1,12 +1,6 @@
-// src/components/pos/CheckoutModal.jsx (FIXED)
-
 import React, { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatters';
-
-// --- PERBAIKAN: Hapus import yang tidak perlu ---
-// import { transactionService } from '../../services/transactions';
-// import { bluetoothPrinterService } from '../../services/bluetoothPrinterService';
 
 export default function CheckoutModal({ 
   cart, 
@@ -72,21 +66,17 @@ export default function CheckoutModal({
     return true;
   };
 
-  // --- PERBAIKAN: Sederhanakan handleSubmit ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setLoading(true);
-
-    // Kumpulkan semua data untuk dikirim kembali ke POS.jsx
-    const checkoutData = {
-        // Data Pembayaran
+    try {
+      await onConfirm({
         payment_method: paymentMethod,
         amount_paid: parseFloat(paid),
         notes: notes.trim() || null,
         tax_percent: taxPercent,
-        // Data Kalkulasi
         subtotal,
         total_discount: totalDiscount,
         tax_amount: taxAmount,
@@ -94,19 +84,13 @@ export default function CheckoutModal({
         change_amount: change,
         remaining_balance: remainingBalance,
         payment_type: paymentType,
-        // Data Pelanggan
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_address: customerAddress.trim(),
         customer_email: customerEmail.trim() || null,
-    };
-
-    // Panggil onConfirm dengan data lengkap
-    try {
-      await onConfirm(checkoutData);
-      // Penutupan modal dan toast akan di-handle oleh POS.jsx
-    } catch (error) {
-      // Error akan ditangkap dan ditampilkan oleh handleCheckout di POS.jsx
+      });
+    } catch {
+      // Error ditangani oleh handleCheckout di POS.jsx
     } finally {
       setLoading(false);
     }
@@ -119,7 +103,6 @@ export default function CheckoutModal({
           Detail Pembayaran
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Customer Information Section... (Tidak ada perubahan) */}
           <div className="bg-gray-50 p-4 rounded-lg space-y-3">
             <h3 className="font-semibold text-gray-700">📋 Informasi Pelanggan</h3>
             <div>
@@ -141,7 +124,6 @@ export default function CheckoutModal({
               </div>
             </div>
           </div>
-          {/* Payment Section... (Tidak ada perubahan) */}
           <div className="bg-blue-50 p-4 rounded-lg space-y-3">
             <h3 className="font-semibold text-blue-700">💳 Detail Pembayaran</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -165,7 +147,6 @@ export default function CheckoutModal({
               <input type="number" value={taxPercent} onChange={(e) => setTaxPercent(Number(e.target.value) || 0)} className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="0" min="0" max="100" step="0.1" disabled={loading}/>
             </div>
           </div>
-          {/* Payment Summary... (Tidak ada perubahan) */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="font-semibold text-gray-700 mb-3">📊 Ringkasan Transaksi</h3>
             <div className="space-y-2 text-sm">
@@ -175,7 +156,6 @@ export default function CheckoutModal({
               <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total Pembayaran:</span><span className="text-blue-600">{formatCurrency(finalTotal)}</span></div>
             </div>
           </div>
-          {/* Payment Status Display... (Sedikit perubahan logika) */}
           {paid > 0 && (
             <div className={`p-4 rounded-lg border-2 ${paymentType === 'dp' ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
               <div className="flex items-center gap-2 mb-2">
@@ -191,12 +171,10 @@ export default function CheckoutModal({
               </div>
             </div>
           )}
-          {/* Notes Section... (Tidak ada perubahan) */}
           <div>
             <label className="block text-sm font-medium text-gray-700">📝 Catatan (Opsional)</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="2" className="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Catatan tambahan..." disabled={loading}/>
           </div>
-          {/* Action Buttons... (Tidak ada perubahan) */}
           <div className="pt-4 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-6 py-2 border rounded-md text-gray-700 hover:bg-gray-50" disabled={loading}>❌ Batal</button>
             <button type="submit" className={`px-6 py-2 font-semibold rounded-md text-white transition-colors ${paymentType === 'dp' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:bg-gray-400`} disabled={loading || paymentType === 'none'}>

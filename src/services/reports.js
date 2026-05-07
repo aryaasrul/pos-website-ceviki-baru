@@ -82,7 +82,7 @@ export const reportService = {
         `)
         .gte('transaction_date', startDate)
         .lte('transaction_date', endDate)
-        .eq('payment_status', 'paid')
+        .in('payment_status', ['paid', 'overpaid'])
         .order('transaction_date', { ascending: false })
 
       if (txError) throw txError

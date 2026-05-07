@@ -9,6 +9,8 @@ import Header from '../components/layout/Header'
 import toast from 'react-hot-toast'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
+const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
+
 export default function Dashboard() {
   const { employee, logout } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -34,8 +36,6 @@ export default function Dashboard() {
       setTransactions(transactionsData)
       setExpenses(expensesData)
       setProducts(productsData)
-
-      const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
       setWeeklyData(weeklyReport.chartData || [])
       setTopProducts(
         (weeklyReport.topProducts || []).slice(0, 5).map((p, i) => ({

@@ -1,6 +1,4 @@
-// src/pages/POS.jsx (FIXED)
-
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePrinter } from '../contexts/PrinterContext'
 import { productService } from '../services/products'
@@ -29,63 +27,49 @@ export default function POS() {
   const [showMobileCart, setShowMobileCart] = useState(false)
   const [globalDiscount, setGlobalDiscount] = useState(0)
   const [globalDiscountType, setGlobalDiscountType] = useState('amount')
-  const [groupedProducts, setGroupedProducts] = useState({})
   const [customerData, setCustomerData] = useState({
     name: '', phone: '', address: '', email: ''
   });
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  useEffect(() => { loadInitialData() }, [])
-  useEffect(() => {
+  const loadProducts = useCallback(async (isRefresh = false) => {
+    try {
+      isRefresh ? setIsRefreshing(true) : setLoading(true)
+      const [productsData, categoriesData] = await Promise.all([
+        productService.getProducts(),
+        productService.getCategories()
+      ])
+      setProducts(productsData)
+      setCategories(categoriesData)
+    } catch (error) {
+      if (!isRefresh) toast.error('Gagal memuat data')
+    } finally {
+      isRefresh ? setIsRefreshing(false) : setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadProducts() }, [loadProducts])
+
+  const groupedProducts = useMemo(() => {
     const filtered = products.filter(product => {
-      if (!product || typeof product.name !== 'string' || typeof product.sku !== 'string') return false;
-      const matchSearch = searchTerm === '' || product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.sku.toLowerCase().includes(searchTerm.toLowerCase()) || product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) || product.model?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCategory = selectedCategory === 'all' || product.category_id === selectedCategory;
-      return matchSearch && matchCategory;
-    });
-    const grouped = filtered.reduce((acc, product) => {
-      const categoryName = product.category_name || 'Lainnya';
-      const brandName = product.brand || 'No Brand';
-      if (!acc[categoryName]) acc[categoryName] = {};
-      if (!acc[categoryName][brandName]) acc[categoryName][brandName] = [];
-      acc[categoryName][brandName].push(product);
-      return acc;
-    }, {});
-    setGroupedProducts(grouped);
+      if (!product || typeof product.name !== 'string' || typeof product.sku !== 'string') return false
+      const matchSearch = searchTerm === '' ||
+        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.model?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchCategory = selectedCategory === 'all' || product.category_id === selectedCategory
+      return matchSearch && matchCategory
+    })
+    return filtered.reduce((acc, product) => {
+      const categoryName = product.category_name || 'Lainnya'
+      const brandName = product.brand || 'No Brand'
+      if (!acc[categoryName]) acc[categoryName] = {}
+      if (!acc[categoryName][brandName]) acc[categoryName][brandName] = []
+      acc[categoryName][brandName].push(product)
+      return acc
+    }, {})
   }, [products, searchTerm, selectedCategory])
-
-  const loadInitialData = async () => {
-    try {
-      setLoading(true);
-      const [productsData, categoriesData] = await Promise.all([
-        productService.getProducts(),
-        productService.getCategories()
-      ]);
-      setProducts(productsData);
-      setCategories(categoriesData);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      toast.error('Gagal memuat data');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const refreshProductsData = async () => {
-    try {
-      setIsRefreshing(true);
-      const [productsData, categoriesData] = await Promise.all([
-        productService.getProducts(),
-        productService.getCategories()
-      ]);
-      setProducts(productsData);
-      setCategories(categoriesData);
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
 
   const handleAddToCart = (product) => {
     const existingItem = cart.find(item => item.id === product.id);
@@ -169,32 +153,23 @@ export default function POS() {
 
       if (isPrinterConnected || bluetoothPrinterService.getDevice()) {
         try {
-          // --- PERBAIKAN: Sinkronkan nama properti di sini ---
           const receiptData = {
-            // Data yang dibutuhkan oleh PrinterContext & bluetoothPrinterService
             id: result.transaction_id,
             transaction_number: result.transaction_number,
             transaction_date: new Date().toISOString(),
             cashier_name: employee.name,
             customer_name: checkoutData.customer_name,
             notes: checkoutData.notes,
-            
-            // Properti item harus bernama `transaction_items`
-            // dan setiap item harus memiliki `name` dan `unit_price`
             transaction_items: cart.map(item => ({
-                ...item,
-                name: item.name,
-                unit_price: item.selling_price,
+              ...item,
+              name: item.name,
+              unit_price: item.selling_price,
             })),
-            
-            // Properti finansial
             subtotal: checkoutData.subtotal,
-            discount_amount: checkoutData.total_discount, // Nama diubah
-            total_amount: checkoutData.final_total,      // Nama diubah
-            amount_paid: checkoutData.amount_paid,       // Nama diubah
-            change_amount: checkoutData.change_amount,   // Nama diubah
-
-            // Properti lain (opsional, tapi baik untuk ada)
+            discount_amount: checkoutData.total_discount,
+            total_amount: checkoutData.final_total,
+            amount_paid: checkoutData.amount_paid,
+            change_amount: checkoutData.change_amount,
             tax_percent: checkoutData.tax_percent,
             tax_amount: checkoutData.tax_amount,
             remaining_balance: checkoutData.remaining_balance,
@@ -216,7 +191,7 @@ export default function POS() {
       setCustomerData({ name: '', phone: '', address: '', email: '' });
       setShowCheckout(false);
       setShowMobileCart(false);
-      refreshProductsData();
+      loadProducts(true);
       
     } catch (error) {
       toast.error(`Transaksi gagal: ${error.message}`, { id: toastId });

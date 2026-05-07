@@ -1,4 +1,3 @@
-// src/services/transactionEditService.js
 import { supabase } from './supabase';
 
 class TransactionEditService {
@@ -156,15 +155,15 @@ class TransactionEditService {
       // Prepare items data for the stored procedure with all required fields
       const itemsJson = itemsWithProductInfo.map(item => ({
         product_id: item.product_id,
-        product_name: item.product_name, // FIX: Added product_name
+        product_name: item.product_name,
+        product_sku: item.product_sku || '',
+        cost_price: item.cost_price || 0,
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal: item.quantity * item.unit_price,
         discount_amount: item.discount_amount || 0,
         discount_type: item.discount_type || 'amount'
       }));
-
-      console.log('📝 Items being sent to stored procedure:', itemsJson);
 
       // Call the stored procedure
       const { data, error } = await supabase.rpc('edit_transaction', {
@@ -174,17 +173,8 @@ class TransactionEditService {
         p_edit_reason: editReason
       });
 
-      if (error) {
-        console.error('❌ Stored procedure error:', error);
-        throw new Error(error.message);
-      }
-
-      if (!data || !data.success) {
-        console.error('❌ Transaction edit failed:', data);
-        throw new Error(data?.error || 'Failed to edit transaction');
-      }
-
-      console.log('✅ Transaction edited successfully:', data);
+      if (error) throw new Error(error.message)
+      if (!data || !data.success) throw new Error(data?.error || 'Failed to edit transaction')
       return data;
     } catch (error) {
       console.error('Error editing transaction:', error);

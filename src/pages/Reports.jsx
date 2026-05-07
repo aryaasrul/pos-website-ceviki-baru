@@ -501,7 +501,7 @@ export default function Reports() {
                         <td className="px-4 py-3 text-sm">{formatDate(tx.transaction_date)}</td>
                         <td className="px-4 py-3 text-sm flex items-center gap-2">
                           <User size={14} className="text-gray-400" />
-                          {tx.cashier_name}
+                          {tx.employee?.name || '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(tx.total_amount)}</td>
                         <td className="px-4 py-3 text-center">

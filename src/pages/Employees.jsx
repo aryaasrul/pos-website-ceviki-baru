@@ -44,8 +44,7 @@ export default function Employees() {
     try {
       await employeeService.updateEmployeeStatus(employeeId, !currentStatus)
       toast.success('Status karyawan berhasil diubah')
-      const data = await employeeService.getEmployees()
-      setEmployees(data)
+      loadEmployees()
     } catch (error) {
       toast.error('Gagal mengubah status karyawan')
     }

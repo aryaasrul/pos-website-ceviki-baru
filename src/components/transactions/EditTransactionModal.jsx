@@ -128,6 +128,9 @@ const EditTransactionModal = ({ transactionId, isOpen, onClose, onSuccess }) => 
       const editData = {
         items: items.map(item => ({
           product_id: item.product_id,
+          product_name: item.product_name || item.product?.name || '',
+          product_sku: item.product_sku || item.product?.sku || '',
+          cost_price: item.cost_price || 0,
           quantity: item.quantity,
           unit_price: item.unit_price,
           discount_amount: item.discount_amount || 0,
