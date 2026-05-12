@@ -1,7 +1,6 @@
-// src/services/exportService.js
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 class ExportService {
   constructor() {
@@ -115,83 +114,54 @@ class ExportService {
    * @param {Object} dateRange - Range tanggal
    */
   exportReportToExcel(reportData, reportType, dateRange) {
-    const workbook = XLSX.utils.book_new();
-    
-    // Sheet 1: Summary
+    const prefix = `Laporan_${this._getReportTypeLabel(reportType)}_${this._formatDateForFile(dateRange.startDate)}`;
+
     const summaryData = [
       ['LAPORAN PENJUALAN'],
       [`Periode: ${this._getDateRangeText(reportType, dateRange)}`],
       [''],
       ['RINGKASAN'],
-      ['Total Penjualan', this._formatCurrency(reportData.totalRevenue || 0)],
-      ['Total HPP', this._formatCurrency(reportData.totalCost || 0)],
-      ['Total Pengeluaran', this._formatCurrency(reportData.totalExpenses || 0)],
-      ['Laba Bersih', this._formatCurrency((reportData.totalRevenue || 0) - (reportData.totalCost || 0) - (reportData.totalExpenses || 0))],
+      ['Total Penjualan', reportData.totalRevenue || 0],
+      ['Total HPP', reportData.totalCost || 0],
+      ['Total Pengeluaran', reportData.totalExpenses || 0],
+      ['Laba Bersih', (reportData.totalRevenue || 0) - (reportData.totalCost || 0) - (reportData.totalExpenses || 0)],
       [''],
       ['Jumlah Transaksi', reportData.totalTransactions || 0],
-      ['Margin (%)', reportData.totalRevenue ? (((reportData.totalRevenue - reportData.totalCost) / reportData.totalRevenue) * 100).toFixed(2) : 0]
+      ['Margin (%)', reportData.totalRevenue ? (((reportData.totalRevenue - reportData.totalCost) / reportData.totalRevenue) * 100).toFixed(2) : 0],
     ];
-    
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Ringkasan');
-    
-    // Sheet 2: Transactions
+    this._downloadCsv(summaryData, `${prefix}_Ringkasan.csv`);
+
     if (reportData.transactions && reportData.transactions.length > 0) {
-      const transactionHeaders = [
-        'No. Transaksi',
-        'Tanggal',
-        'Customer',
-        'Subtotal',
-        'Pajak',
-        'Diskon',
-        'Total',
-        'Status Pembayaran',
-        'Kasir'
+      const transactionData = [
+        ['No. Transaksi', 'Tanggal', 'Customer', 'Subtotal', 'Pajak', 'Diskon', 'Total', 'Status Pembayaran', 'Kasir'],
+        ...reportData.transactions.map(tx => [
+          tx.transaction_number,
+          new Date(tx.transaction_date).toLocaleDateString('id-ID'),
+          tx.customer_name || 'Walk-in Customer',
+          tx.subtotal || 0,
+          tx.tax_amount || 0,
+          tx.discount_amount || 0,
+          tx.total_amount || 0,
+          tx.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas',
+          tx.employee_name || '',
+        ]),
       ];
-      
-      const transactionRows = reportData.transactions.map(tx => [
-        tx.transaction_number,
-        new Date(tx.transaction_date).toLocaleDateString('id-ID'),
-        tx.customer_name || 'Walk-in Customer',
-        tx.subtotal || 0,
-        tx.tax_amount || 0,
-        tx.discount_amount || 0,
-        tx.total_amount || 0,
-        tx.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas',
-        tx.employee_name || ''
-      ]);
-      
-      const transactionData = [transactionHeaders, ...transactionRows];
-      const transactionSheet = XLSX.utils.aoa_to_sheet(transactionData);
-      XLSX.utils.book_append_sheet(workbook, transactionSheet, 'Transaksi');
+      this._downloadCsv(transactionData, `${prefix}_Transaksi.csv`);
     }
-    
-    // Sheet 3: Expenses
+
     if (reportData.expenses && reportData.expenses.length > 0) {
-      const expenseHeaders = [
-        'Tanggal',
-        'Deskripsi',
-        'Kategori',
-        'Jumlah',
-        'Catatan'
+      const expenseData = [
+        ['Tanggal', 'Deskripsi', 'Kategori', 'Jumlah', 'Catatan'],
+        ...reportData.expenses.map(exp => [
+          new Date(exp.expense_date).toLocaleDateString('id-ID'),
+          exp.description || '',
+          exp.category || '',
+          exp.amount || 0,
+          exp.notes || '',
+        ]),
       ];
-      
-      const expenseRows = reportData.expenses.map(exp => [
-        new Date(exp.expense_date).toLocaleDateString('id-ID'),
-        exp.description || '',
-        exp.category || '',
-        exp.amount || 0,
-        exp.notes || ''
-      ]);
-      
-      const expenseData = [expenseHeaders, ...expenseRows];
-      const expenseSheet = XLSX.utils.aoa_to_sheet(expenseData);
-      XLSX.utils.book_append_sheet(workbook, expenseSheet, 'Pengeluaran');
+      this._downloadCsv(expenseData, `${prefix}_Pengeluaran.csv`);
     }
-    
-    // Save Excel
-    const fileName = `Laporan_${this._getReportTypeLabel(reportType)}_${this._formatDateForFile(dateRange.startDate)}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
   }
 
   /**
@@ -199,58 +169,26 @@ class ExportService {
    * @param {Array} unpaidData - Data transaksi belum lunas
    */
   exportUnpaidToExcel(unpaidData) {
-    const workbook = XLSX.utils.book_new();
-    
-    // Summary data
     const totalPiutang = unpaidData.reduce((sum, item) => sum + item.remaining_balance, 0);
-    const summaryData = [
+    const data = [
       ['LAPORAN PIUTANG'],
       [`Tanggal: ${new Date().toLocaleDateString('id-ID')}`],
       [''],
-      ['RINGKASAN'],
-      ['Total Piutang', this._formatCurrency(totalPiutang)],
+      ['Total Piutang', totalPiutang],
       ['Jumlah Transaksi', unpaidData.length],
-      ['']
+      [''],
+      ['No. Transaksi', 'Tanggal', 'Customer', 'Total Amount', 'Amount Paid', 'Remaining Balance', 'Status'],
+      ...unpaidData.map(item => [
+        item.transaction_number,
+        new Date(item.transaction_date).toLocaleDateString('id-ID'),
+        item.customer_name || 'Walk-in Customer',
+        item.total_amount,
+        item.amount_paid,
+        item.remaining_balance,
+        item.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas',
+      ]),
     ];
-    
-    // Detail data
-    const headers = [
-      'No. Transaksi',
-      'Tanggal',
-      'Customer',
-      'Total Amount',
-      'Amount Paid',
-      'Remaining Balance',
-      'Status'
-    ];
-    
-    const rows = unpaidData.map(item => [
-      item.transaction_number,
-      new Date(item.transaction_date).toLocaleDateString('id-ID'),
-      item.customer_name || 'Walk-in Customer',
-      item.total_amount,
-      item.amount_paid,
-      item.remaining_balance,
-      item.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'
-    ]);
-    
-    const allData = [...summaryData, headers, ...rows];
-    const worksheet = XLSX.utils.aoa_to_sheet(allData);
-    
-    // Style the headers
-    const range = XLSX.utils.decode_range(worksheet['!ref']);
-    for (let col = range.s.c; col <= range.e.c; col++) {
-      const headerCell = XLSX.utils.encode_cell({ r: summaryData.length, c: col });
-      if (worksheet[headerCell]) {
-        worksheet[headerCell].s = {
-          font: { bold: true },
-          fill: { fgColor: { rgb: "CCCCCC" } }
-        };
-      }
-    }
-    
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Piutang');
-    XLSX.writeFile(workbook, `Laporan_Piutang_${this._formatDateForFile(new Date())}.xlsx`);
+    this._downloadCsv(data, `Laporan_Piutang_${this._formatDateForFile(new Date())}.csv`);
   }
 
   // ==================== HELPER METHODS ====================
@@ -355,6 +293,19 @@ class ExportService {
       styles: { fontSize: 8 },
       headStyles: { fillColor: [231, 76, 60] }
     });
+  }
+
+  _downloadCsv(data, fileName) {
+    const csv = Papa.unparse(data)
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   _formatCurrency(amount) {

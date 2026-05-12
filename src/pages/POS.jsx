@@ -19,18 +19,33 @@ export default function POS() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
-  const [cart, setCart] = useState([])
+  const [cart, setCart] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('pos_cart')) || [] } catch { return [] }
+  })
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [showCheckout, setShowCheckout] = useState(false)
   const [showExpense, setShowExpense] = useState(false)
   const [showMobileCart, setShowMobileCart] = useState(false)
-  const [globalDiscount, setGlobalDiscount] = useState(0)
-  const [globalDiscountType, setGlobalDiscountType] = useState('amount')
+  const [globalDiscount, setGlobalDiscount] = useState(
+    () => parseFloat(localStorage.getItem('pos_cart_discount')) || 0
+  )
+  const [globalDiscountType, setGlobalDiscountType] = useState(
+    () => localStorage.getItem('pos_cart_discount_type') || 'amount'
+  )
   const [customerData, setCustomerData] = useState({
     name: '', phone: '', address: '', email: ''
   });
   const [isRefreshing, setIsRefreshing] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem('pos_cart', JSON.stringify(cart))
+  }, [cart])
+
+  useEffect(() => {
+    localStorage.setItem('pos_cart_discount', String(globalDiscount))
+    localStorage.setItem('pos_cart_discount_type', globalDiscountType)
+  }, [globalDiscount, globalDiscountType])
 
   const loadProducts = useCallback(async (isRefresh = false) => {
     try {
@@ -90,7 +105,7 @@ export default function POS() {
       return;
     }
     const product = products.find(p => p.id === productId);
-    if (newQuantity > product.current_stock) {
+    if (!product || newQuantity > product.current_stock) {
       toast.error('Stok tidak mencukupi');
       return;
     }

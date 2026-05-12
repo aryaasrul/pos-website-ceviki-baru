@@ -91,33 +91,23 @@ const getTransactionDetail = async (transactionId) => {
 }
 
 const addPayment = async (transactionId, amount) => {
-  const { data: transaction, error: fetchError } = await supabase
-    .from('transactions')
-    .select('total_amount, amount_paid')
-    .eq('id', transactionId)
-    .single()
-  if (fetchError) throw fetchError
-
-  const newAmountPaid = (transaction.amount_paid || 0) + parseFloat(amount)
-  const newRemainingBalance = transaction.total_amount - newAmountPaid
-  const newPaymentStatus = newRemainingBalance <= 0 ? 'paid' : 'partial'
-
-  const { data, error } = await supabase
-    .from('transactions')
-    .update({
-      amount_paid: newAmountPaid,
-      remaining_balance: Math.max(newRemainingBalance, 0),
-      payment_status: newPaymentStatus
-    })
-    .eq('id', transactionId)
-    .select()
-    .single()
-  if (error) throw error
+  const { data, error } = await supabase.rpc('process_payment', {
+    p_transaction_id: transactionId,
+    p_amount: parseFloat(amount),
+  })
+  if (error) throw new Error(`Database error: ${error.message}`)
+  if (!data) throw new Error('Tidak ada response dari database')
+  if (!data.success) throw new Error(data.error || 'Pembayaran gagal')
 
   return {
     success: true,
-    transaction: data,
-    new_remaining_balance: Math.max(newRemainingBalance, 0)
+    transaction: {
+      id: transactionId,
+      amount_paid: data.amount_paid,
+      remaining_balance: data.remaining_balance,
+      payment_status: data.payment_status,
+    },
+    new_remaining_balance: data.remaining_balance,
   }
 }
 
