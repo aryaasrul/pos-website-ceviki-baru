@@ -57,6 +57,15 @@ export const authService = {
     }
   },
 
+  async checkSessionExists() {
+    try {
+      const { data } = await withTimeout(supabase.auth.getSession())
+      return !!data?.session
+    } catch {
+      return null // null = tidak tahu (error)
+    }
+  },
+
   onAuthStateChange(callback) {
     return supabase.auth.onAuthStateChange(callback)
   },
