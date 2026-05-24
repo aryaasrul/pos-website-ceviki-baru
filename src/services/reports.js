@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { withTimeout } from '../utils/supabaseTimeout'
 
 export const reportService = {
   async getDailyReport(date) {
@@ -68,22 +69,24 @@ export const reportService = {
   async getReportData(startDate, endDate) {
     try {
       // Get transactions dengan join yang specific
-      const { data: transactions, error: txError } = await supabase
-        .from('transactions')
-        .select(`
-          id,
-          transaction_number,
-          transaction_date,
-          total_amount,
-          discount_amount,
-          payment_method,
-          cashier_id,
-          payment_status
-        `)
-        .gte('transaction_date', startDate)
-        .lte('transaction_date', endDate)
-        .in('payment_status', ['paid', 'overpaid'])
-        .order('transaction_date', { ascending: false })
+      const { data: transactions, error: txError } = await withTimeout(
+        supabase
+          .from('transactions')
+          .select(`
+            id,
+            transaction_number,
+            transaction_date,
+            total_amount,
+            discount_amount,
+            payment_method,
+            cashier_id,
+            payment_status
+          `)
+          .gte('transaction_date', startDate)
+          .lte('transaction_date', endDate)
+          .in('payment_status', ['paid', 'overpaid'])
+          .order('transaction_date', { ascending: false })
+      )
 
       if (txError) throw txError
 
@@ -111,18 +114,20 @@ export const reportService = {
 
       // Get transaction items separately
       const transactionIds = transactions.map(tx => tx.id)
-      const { data: transactionItems, error: itemsError } = await supabase
-        .from('transaction_items')
-        .select(`
-          transaction_id,
-          quantity,
-          unit_price,
-          cost_price,
-          discount_amount,
-          subtotal,
-          product_id
-        `)
-        .in('transaction_id', transactionIds)
+      const { data: transactionItems, error: itemsError } = await withTimeout(
+        supabase
+          .from('transaction_items')
+          .select(`
+            transaction_id,
+            quantity,
+            unit_price,
+            cost_price,
+            discount_amount,
+            subtotal,
+            product_id
+          `)
+          .in('transaction_id', transactionIds)
+      )
 
       if (itemsError) throw itemsError
 
@@ -130,10 +135,12 @@ export const reportService = {
       const productIds = [...new Set(transactionItems?.map(item => item.product_id) || [])]
       let products = []
       if (productIds.length > 0) {
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('id, name, sku')
-          .in('id', productIds)
+        const { data: productsData, error: productsError } = await withTimeout(
+          supabase
+            .from('products')
+            .select('id, name, sku')
+            .in('id', productIds)
+        )
 
         if (productsError) throw productsError
         products = productsData || []
@@ -143,22 +150,26 @@ export const reportService = {
       const cashierIds = [...new Set(transactions.map(tx => tx.cashier_id))]
       let employees = []
       if (cashierIds.length > 0) {
-        const { data: employeesData, error: empError } = await supabase
-          .from('employees')
-          .select('id, name')
-          .in('id', cashierIds)
+        const { data: employeesData, error: empError } = await withTimeout(
+          supabase
+            .from('employees')
+            .select('id, name')
+            .in('id', cashierIds)
+        )
 
         if (empError) throw empError
         employees = employeesData || []
       }
 
       // Get expenses
-      const { data: expenses, error: expError } = await supabase
-        .from('expenses')
-        .select('*')
-        .gte('expense_date', startDate)
-        .lte('expense_date', endDate)
-        .order('expense_date', { ascending: false })
+      const { data: expenses, error: expError } = await withTimeout(
+        supabase
+          .from('expenses')
+          .select('*')
+          .gte('expense_date', startDate)
+          .lte('expense_date', endDate)
+          .order('expense_date', { ascending: false })
+      )
 
       if (expError) throw expError
 

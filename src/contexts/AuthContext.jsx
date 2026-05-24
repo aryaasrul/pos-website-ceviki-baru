@@ -20,8 +20,8 @@ export function AuthProvider({ children }) {
           setUser(data.user)
           setEmployee(data.employee)
         }
-      } catch {
-        // unauthenticated is a valid state
+      } catch (err) {
+        console.warn('Auth init error (non-critical):', err?.message)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -54,8 +54,8 @@ export function AuthProvider({ children }) {
             setUser(null)
             setEmployee(null)
           }
-        } catch {
-          // keep existing state on transient errors
+        } catch (err) {
+          console.warn('Auth state change error (transient):', err?.message)
         }
       }
     })

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { withTimeout } from '../utils/supabaseTimeout';
 
 class TransactionEditService {
   /**
@@ -7,15 +8,17 @@ class TransactionEditService {
    */
   async checkOwnerRole() {
     try {
-      const { data: authData } = await supabase.auth.getUser();
+      const { data: authData } = await withTimeout(supabase.auth.getUser());
       const user = authData?.user;
       if (!user) return false;
 
-      const { data: employee } = await supabase
-        .from('employees')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+      const { data: employee } = await withTimeout(
+        supabase
+          .from('employees')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+      );
 
       return employee?.role === 'owner';
     } catch (error) {
@@ -31,11 +34,13 @@ class TransactionEditService {
    */
   async canEditTransaction(transactionId) {
     try {
-      const { data: transaction } = await supabase
-        .from('transactions')
-        .select('transaction_date, payment_status, print_count')
-        .eq('id', transactionId)
-        .single();
+      const { data: transaction } = await withTimeout(
+        supabase
+          .from('transactions')
+          .select('transaction_date, payment_status, print_count')
+          .eq('id', transactionId)
+          .single()
+      );
 
       if (!transaction) {
         return { canEdit: false, reason: 'Transaksi tidak ditemukan' };
@@ -75,27 +80,31 @@ class TransactionEditService {
   async getTransactionForEdit(transactionId) {
     try {
       // Get transaction details
-      const { data: transaction } = await supabase
-        .from('transactions')
-        .select(`
-          *,
-          employee:employees!transactions_cashier_id_fkey(name)
-        `)
-        .eq('id', transactionId)
-        .single();
+      const { data: transaction } = await withTimeout(
+        supabase
+          .from('transactions')
+          .select(`
+            *,
+            employee:employees!transactions_cashier_id_fkey(name)
+          `)
+          .eq('id', transactionId)
+          .single()
+      );
 
       if (!transaction) {
         throw new Error('Transaksi tidak ditemukan');
       }
 
       // Get transaction items with complete product information
-      const { data: items } = await supabase
-        .from('transaction_items')
-        .select(`
-          *,
-          product:products(id, name, sku, selling_price, current_stock)
-        `)
-        .eq('transaction_id', transactionId);
+      const { data: items } = await withTimeout(
+        supabase
+          .from('transaction_items')
+          .select(`
+            *,
+            product:products(id, name, sku, selling_price, current_stock)
+          `)
+          .eq('transaction_id', transactionId)
+      );
 
       // Ensure items have all required fields including product_name
       const processedItems = (items || []).map(item => ({
@@ -123,7 +132,7 @@ class TransactionEditService {
    */
   async editTransaction(transactionId, editData, editReason) {
     try {
-      const { data: authData } = await supabase.auth.getUser();
+      const { data: authData } = await withTimeout(supabase.auth.getUser());
       const user = authData?.user;
       if (!user) {
         throw new Error('User not authenticated');
@@ -136,11 +145,13 @@ class TransactionEditService {
           
           // If product_name is missing, fetch it from products table
           if (!productName) {
-            const { data: product } = await supabase
-              .from('products')
-              .select('name')
-              .eq('id', item.product_id)
-              .single();
+            const { data: product } = await withTimeout(
+              supabase
+                .from('products')
+                .select('name')
+                .eq('id', item.product_id)
+                .single()
+            );
             
             productName = product?.name || 'Unknown Product';
           }
@@ -166,12 +177,14 @@ class TransactionEditService {
       }));
 
       // Call the stored procedure
-      const { data, error } = await supabase.rpc('edit_transaction', {
-        p_transaction_id: transactionId,
-        p_edited_by: user.id,
-        p_items: itemsJson,
-        p_edit_reason: editReason
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc('edit_transaction', {
+          p_transaction_id: transactionId,
+          p_edited_by: user.id,
+          p_items: itemsJson,
+          p_edit_reason: editReason
+        })
+      );
 
       if (error) throw new Error(error.message)
       if (!data || !data.success) throw new Error(data?.error || 'Failed to edit transaction')
@@ -189,14 +202,16 @@ class TransactionEditService {
    */
   async getEditHistory(transactionId) {
     try {
-      const { data } = await supabase
-        .from('transaction_edits')
-        .select(`
-          *,
-          editor:employees!transaction_edits_edited_by_fkey(name)
-        `)
-        .eq('transaction_id', transactionId)
-        .order('created_at', { ascending: false });
+      const { data } = await withTimeout(
+        supabase
+          .from('transaction_edits')
+          .select(`
+            *,
+            editor:employees!transaction_edits_edited_by_fkey(name)
+          `)
+          .eq('transaction_id', transactionId)
+          .order('created_at', { ascending: false })
+      );
 
       return data || [];
     } catch (error) {
@@ -223,11 +238,13 @@ class TransactionEditService {
 
         if (quantityDiff > 0) {
           // Check if we have enough stock for the increase
-          const { data: product } = await supabase
-            .from('products')
-            .select('name, current_stock')
-            .eq('id', item.product_id)
-            .single();
+          const { data: product } = await withTimeout(
+            supabase
+              .from('products')
+              .select('name, current_stock')
+              .eq('id', item.product_id)
+              .single()
+          );
 
           if (!product) {
             errors.push(`Produk dengan ID ${item.product_id} tidak ditemukan`);
@@ -285,22 +302,24 @@ class TransactionEditService {
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
 
-      const { data } = await supabase
-        .from('transactions')
-        .select(`
-          id,
-          transaction_number,
-          transaction_date,
-          total_amount,
-          payment_status,
-          print_count,
-          customer_name,
-          employee:employees!transactions_cashier_id_fkey(name)
-        `)
-        .gte('transaction_date', yesterday.toISOString())
-        .neq('payment_status', 'partial')
-        .order('transaction_date', { ascending: false })
-        .limit(limit);
+      const { data } = await withTimeout(
+        supabase
+          .from('transactions')
+          .select(`
+            id,
+            transaction_number,
+            transaction_date,
+            total_amount,
+            payment_status,
+            print_count,
+            customer_name,
+            employee:employees!transactions_cashier_id_fkey(name)
+          `)
+          .gte('transaction_date', yesterday.toISOString())
+          .neq('payment_status', 'partial')
+          .order('transaction_date', { ascending: false })
+          .limit(limit)
+      );
 
       return data || [];
     } catch (error) {

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { withTimeout } from '../utils/supabaseTimeout'
 
 export const productService = {
   async getProducts(filters = {}) {
@@ -22,7 +23,7 @@ export const productService = {
         query = query.gt('current_stock', 0)
       }
 
-      const { data, error } = await query
+      const { data, error } = await withTimeout(query)
       
       if (error) throw error
       return data || []
@@ -34,11 +35,13 @@ export const productService = {
 
   async getCategories() {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('active', true)
-        .order('name')
+      const { data, error } = await withTimeout(
+        supabase
+          .from('categories')
+          .select('*')
+          .eq('active', true)
+          .order('name')
+      )
       
       if (error) throw error
       return data || []
@@ -50,11 +53,13 @@ export const productService = {
 
   async getProductById(id) {
     try {
-      const { data, error } = await supabase
-        .from('v_products')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const { data, error } = await withTimeout(
+        supabase
+          .from('v_products')
+          .select('*')
+          .eq('id', id)
+          .single()
+      )
 
       if (error) throw error
       return data
@@ -70,16 +75,18 @@ export const productService = {
       const user = authData?.user
 
       // Trigger update_product_stock otomatis update products.current_stock
-      const { error: movementError } = await supabase
-        .from('stock_movements')
-        .insert({
-          product_id: productId,
-          type,
-          quantity,
-          reference_type: type === 'adjustment' ? 'adjustment' : type === 'in' ? 'stock_in' : 'stock_out',
-          notes,
-          created_by: user?.id
-        })
+      const { error: movementError } = await withTimeout(
+        supabase
+          .from('stock_movements')
+          .insert({
+            product_id: productId,
+            type,
+            quantity,
+            reference_type: type === 'adjustment' ? 'adjustment' : type === 'in' ? 'stock_in' : 'stock_out',
+            notes,
+            created_by: user?.id
+          })
+      )
 
       if (movementError) throw movementError
 
@@ -92,11 +99,13 @@ export const productService = {
 
   async createProduct(productData) {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .insert({ ...productData, current_stock: 0 })
-        .select()
-        .single()
+      const { data, error } = await withTimeout(
+        supabase
+          .from('products')
+          .insert({ ...productData, current_stock: 0 })
+          .select()
+          .single()
+      )
 
       if (error) throw error
       return data
@@ -108,12 +117,14 @@ export const productService = {
 
   async updateProduct(id, productData) {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .update({ ...productData, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single()
+      const { data, error } = await withTimeout(
+        supabase
+          .from('products')
+          .update({ ...productData, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single()
+      )
 
       if (error) throw error
       return data
@@ -125,10 +136,12 @@ export const productService = {
 
   async deleteProduct(id) {
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({ active: false, updated_at: new Date().toISOString() })
-        .eq('id', id)
+      const { error } = await withTimeout(
+        supabase
+          .from('products')
+          .update({ active: false, updated_at: new Date().toISOString() })
+          .eq('id', id)
+      )
 
       if (error) throw error
       return { success: true }

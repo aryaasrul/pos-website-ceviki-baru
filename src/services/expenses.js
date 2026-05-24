@@ -1,19 +1,22 @@
 import { supabase } from './supabase'
+import { withTimeout } from '../utils/supabaseTimeout'
 
 export const expenseService = {
   async createExpense(expenseData) {
     try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .insert({
-          category: expenseData.category,
-          amount: expenseData.amount,
-          description: expenseData.description,
-          created_by: expenseData.created_by,
-          expense_date: new Date().toISOString()
-        })
-        .select()
-        .single()
+      const { data, error } = await withTimeout(
+        supabase
+          .from('expenses')
+          .insert({
+            category: expenseData.category,
+            amount: expenseData.amount,
+            description: expenseData.description,
+            created_by: expenseData.created_by,
+            expense_date: new Date().toISOString()
+          })
+          .select()
+          .single()
+      )
 
       if (error) throw error
       return data
@@ -27,11 +30,13 @@ export const expenseService = {
     try {
       const today = new Date().toISOString().split('T')[0]
       
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*, employees(name)')
-        .gte('expense_date', today)
-        .order('created_at', { ascending: false })
+      const { data, error } = await withTimeout(
+        supabase
+          .from('expenses')
+          .select('*, employees(name)')
+          .gte('expense_date', today)
+          .order('created_at', { ascending: false })
+      )
 
       if (error) throw error
       return data || []
@@ -43,12 +48,14 @@ export const expenseService = {
 
   async getExpensesByDateRange(startDate, endDate) {
     try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*, employees(name)')
-        .gte('expense_date', startDate)
-        .lte('expense_date', endDate)
-        .order('expense_date', { ascending: false })
+      const { data, error } = await withTimeout(
+        supabase
+          .from('expenses')
+          .select('*, employees(name)')
+          .gte('expense_date', startDate)
+          .lte('expense_date', endDate)
+          .order('expense_date', { ascending: false })
+      )
 
       if (error) throw error
       return data || []

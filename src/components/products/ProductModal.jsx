@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import toast from 'react-hot-toast';
 
+const PRODUCT_TIMEOUT_MS = 15000
+
 export default function ProductModal({ product, categories, onSave, onClose }) {
   const isEdit = !!product;
   
@@ -87,21 +89,31 @@ export default function ProductModal({ product, categories, onSave, onClose }) {
       };
 
       if (isEdit) {
-        // Update existing product
-        const { error } = await supabase
-          .from('products')
-          .update(productData)
-          .eq('id', product.id);
+        // Update existing product with timeout
+        const { error } = await Promise.race([
+          supabase
+            .from('products')
+            .update(productData)
+            .eq('id', product.id),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Koneksi timeout. Periksa internet Anda.')), PRODUCT_TIMEOUT_MS)
+          ),
+        ])
 
         if (error) throw error;
         toast.success('Produk berhasil diperbarui');
       } else {
         // Create new product
-        productData.current_stock = 0; // New products start with 0 stock
-        
-        const { error } = await supabase
-          .from('products')
-          .insert(productData);
+        productData.current_stock = 0;
+
+        const { error } = await Promise.race([
+          supabase
+            .from('products')
+            .insert(productData),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Koneksi timeout. Periksa internet Anda.')), PRODUCT_TIMEOUT_MS)
+          ),
+        ])
 
         if (error) throw error;
         toast.success('Produk berhasil ditambahkan');
@@ -113,7 +125,7 @@ export default function ProductModal({ product, categories, onSave, onClose }) {
       if (error.code === '23505') {
         toast.error('SKU sudah digunakan');
       } else {
-        toast.error('Gagal menyimpan produk');
+        toast.error(error.message || 'Gagal menyimpan produk');
       }
     } finally {
       setLoading(false);

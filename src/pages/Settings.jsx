@@ -3,6 +3,7 @@ import Header from '../components/layout/Header';
 import { useAuth } from '../contexts/AuthContext';
 import { usePrinter } from '../contexts/PrinterContext';
 import { supabase } from '../services/supabase';
+import { withTimeout } from '../utils/supabaseTimeout';
 import toast from 'react-hot-toast';
 
 
@@ -38,11 +39,13 @@ export default function Settings() {
     const fetchSettings = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('settings')
-          .select('*')
-          .limit(1)
-          .single();
+        const { data, error } = await withTimeout(
+          supabase
+            .from('settings')
+            .select('*')
+            .limit(1)
+            .single()
+        );
 
         if (error && error.code !== 'PGRST116') {
           throw error;
@@ -88,9 +91,11 @@ export default function Settings() {
     setSaving(true);
     const toastId = toast.loading('Menyimpan pengaturan...');
     try {
-      const { error } = await supabase
-        .from('settings')
-        .upsert({ ...settings, id: 1 }, { onConflict: 'id' });
+      const { error } = await withTimeout(
+          supabase
+            .from('settings')
+            .upsert({ ...settings, id: 1 }, { onConflict: 'id' })
+      );
 
       if (error) throw error;
       toast.success('Pengaturan berhasil disimpan!', { id: toastId });

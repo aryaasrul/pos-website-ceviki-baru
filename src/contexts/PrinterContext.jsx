@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
 import { bluetoothPrinterService } from '../services/bluetoothPrinterService';
 import { supabase } from '../services/supabase';
+import { withTimeout } from '../utils/supabaseTimeout';
 import { useAuth } from './AuthContext';
 import toast from 'react-hot-toast';
 
@@ -92,12 +93,14 @@ export function PrinterProvider({ children }) {
     };
 
     try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('shop_name, shop_address, shop_phone, default_print_copies')
-        .limit(1)
-        .single();
-      
+const { data, error } = await withTimeout(
+        supabase
+          .from('settings')
+          .select('shop_name, shop_address, shop_phone, default_print_copies')
+          .limit(1)
+          .single()
+      );
+
       if (error && error.code !== 'PGRST116') throw error;
       
       return { ...defaults, ...(data || {}) };
@@ -262,21 +265,25 @@ export function PrinterProvider({ children }) {
    */
   const incrementPrintCount = async (transactionId, printType, copies) => {
     try {
-      const { data: tx, error: fetchError } = await supabase
-        .from('transactions')
-        .select('print_count')
-        .eq('id', transactionId)
-        .single();
+      const { data: tx, error: fetchError } = await withTimeout(
+        supabase
+          .from('transactions')
+          .select('print_count')
+          .eq('id', transactionId)
+          .single()
+      );
 
       if (fetchError) throw fetchError;
 
-      const { error } = await supabase
-        .from('transactions')
-        .update({
-          print_count: (tx?.print_count || 0) + copies,
-          last_printed_at: new Date().toISOString()
-        })
-        .eq('id', transactionId);
+      const { error } = await withTimeout(
+        supabase
+          .from('transactions')
+          .update({
+            print_count: (tx?.print_count || 0) + copies,
+            last_printed_at: new Date().toISOString()
+          })
+          .eq('id', transactionId)
+      );
 
       if (error) {
         console.error('Failed to update print count:', error);

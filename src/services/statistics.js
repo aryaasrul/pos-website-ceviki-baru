@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { withTimeout } from '../utils/supabaseTimeout'
 
 export const statisticsService = {
   async getStatistics(period, year) {
@@ -19,40 +20,46 @@ export const statisticsService = {
       }
 
       // Simplifikasi query - ambil data langsung tanpa RPC
-      const { data: transactions, error: txError } = await supabase
-        .from('transactions')
-        .select(`
-          *,
-          transaction_items (
-            quantity,
-            unit_price,
-            cost_price,
-            product_id,
-            products (
-              id,
-              name,
-              sku,
-              category_id
+      const { data: transactions, error: txError } = await withTimeout(
+        supabase
+          .from('transactions')
+          .select(`
+            *,
+            transaction_items (
+              quantity,
+              unit_price,
+              cost_price,
+              product_id,
+              products (
+                id,
+                name,
+                sku,
+                category_id
+              )
             )
-          )
-        `)
-        .gte('transaction_date', startDate.toISOString())
-        .lte('transaction_date', endDate.toISOString())
-        .eq('payment_status', 'paid')
+          `)
+          .gte('transaction_date', startDate.toISOString())
+          .lte('transaction_date', endDate.toISOString())
+          .eq('payment_status', 'paid')
+      )
 
       if (txError) throw txError
 
       // Get products directly
-      const { data: products, error: prodError } = await supabase
-        .from('v_product_performance')
-        .select('*')
+      const { data: products, error: prodError } = await withTimeout(
+        supabase
+          .from('v_product_performance')
+          .select('*')
+      )
 
       if (prodError) throw prodError
 
       // Get categories
-      const { data: categories, error: catError } = await supabase
-        .from('categories')
-        .select('*')
+      const { data: categories, error: catError } = await withTimeout(
+        supabase
+          .from('categories')
+          .select('*')
+      )
 
       if (catError) throw catError
 

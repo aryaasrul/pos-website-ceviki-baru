@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { withTimeout } from '../utils/supabaseTimeout';
 
 const createTransaction = async (transactionData) => {
   if (!transactionData.items || transactionData.items.length === 0) throw new Error('Cart kosong')
@@ -30,7 +31,7 @@ const createTransaction = async (transactionData) => {
     p_notes: transactionData.notes?.trim() || null
   }
 
-  const { data, error } = await supabase.rpc('process_transaction', rpcArgs)
+  const { data, error } = await withTimeout(supabase.rpc('process_transaction', rpcArgs))
   if (error) throw new Error(`Database error: ${error.message}`)
   if (!data) throw new Error('Tidak ada response dari database')
   if (!data.success) throw new Error(data.error || 'Transaksi gagal')
@@ -49,7 +50,7 @@ const getTransactions = async (filters = {}) => {
   if (filters.cashier_id) query = query.eq('cashier_id', filters.cashier_id)
   if (filters.limit) query = query.limit(filters.limit)
 
-  const { data, error } = await query
+  const { data, error } = await withTimeout(query)
   if (error) throw error
   return data || []
 }
@@ -63,38 +64,44 @@ const getTodayTransactions = async () => {
 }
 
 const getUnpaidTransactions = async () => {
-  const { data, error } = await supabase
-    .from('v_transactions_with_customer')
-    .select('*')
-    .in('payment_status', ['unpaid', 'partial'])
-    .gt('remaining_balance', 0)
-    .order('transaction_date', { ascending: true })
+  const { data, error } = await withTimeout(
+    supabase
+      .from('v_transactions_with_customer')
+      .select('*')
+      .in('payment_status', ['unpaid', 'partial'])
+      .gt('remaining_balance', 0)
+      .order('transaction_date', { ascending: true })
+  )
   if (error) throw error
   return data || []
 }
 
 const getTransactionDetail = async (transactionId) => {
-  const { data: transaction, error: txError } = await supabase
-    .from('v_transactions_with_customer')
-    .select('*')
-    .eq('id', transactionId)
-    .single()
+  const { data: transaction, error: txError } = await withTimeout(
+    supabase
+      .from('v_transactions_with_customer')
+      .select('*')
+      .eq('id', transactionId)
+      .single()
+  )
   if (txError) throw txError
 
-  const { data: items, error: itemsError } = await supabase
-    .from('transaction_items')
-    .select('*, product:products(name, sku, brand)')
-    .eq('transaction_id', transactionId)
+  const { data: items, error: itemsError } = await withTimeout(
+    supabase
+      .from('transaction_items')
+      .select('*, product:products(name, sku, brand)')
+      .eq('transaction_id', transactionId)
+  )
   if (itemsError) throw itemsError
 
   return { ...transaction, items: items || [] }
 }
 
 const addPayment = async (transactionId, amount) => {
-  const { data, error } = await supabase.rpc('process_payment', {
+  const { data, error } = await withTimeout(supabase.rpc('process_payment', {
     p_transaction_id: transactionId,
     p_amount: parseFloat(amount),
-  })
+  }))
   if (error) throw new Error(`Database error: ${error.message}`)
   if (!data) throw new Error('Tidak ada response dari database')
   if (!data.success) throw new Error(data.error || 'Pembayaran gagal')
@@ -113,11 +120,13 @@ const addPayment = async (transactionId, amount) => {
 
 const getDailySales = async (date = null) => {
   const targetDate = date || new Date().toISOString().split('T')[0]
-  const { data: transactions, error } = await supabase
-    .from('transactions')
-    .select('total_amount, amount_paid, payment_status')
-    .gte('transaction_date', `${targetDate}T00:00:00`)
-    .lte('transaction_date', `${targetDate}T23:59:59`)
+  const { data: transactions, error } = await withTimeout(
+    supabase
+      .from('transactions')
+      .select('total_amount, amount_paid, payment_status')
+      .gte('transaction_date', `${targetDate}T00:00:00`)
+      .lte('transaction_date', `${targetDate}T23:59:59`)
+  )
 
   if (error && error.code !== 'PGRST116') throw error
 
@@ -146,12 +155,14 @@ const getDailySales = async (date = null) => {
 
 const searchTransactionsByCustomer = async (searchTerm) => {
   if (!searchTerm?.trim()) return []
-  const { data, error } = await supabase
-    .from('v_transactions_with_customer')
-    .select('*')
-    .or(`customer_name.ilike.%${searchTerm}%,customer_phone.ilike.%${searchTerm}%`)
-    .order('transaction_date', { ascending: false })
-    .limit(50)
+  const { data, error } = await withTimeout(
+    supabase
+      .from('v_transactions_with_customer')
+      .select('*')
+      .or(`customer_name.ilike.%${searchTerm}%,customer_phone.ilike.%${searchTerm}%`)
+      .order('transaction_date', { ascending: false })
+      .limit(50)
+  )
   if (error) throw error
   return data || []
 }

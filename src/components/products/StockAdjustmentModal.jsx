@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../services/supabase';
+import { withTimeout } from '../../utils/supabaseTimeout';
 import toast from 'react-hot-toast';
 
 export default function StockAdjustmentModal({ product, onSave, onClose }) {
@@ -35,16 +36,18 @@ export default function StockAdjustmentModal({ product, onSave, onClose }) {
       }
 
       // Insert ke stock_movements
-      const { error: movementError } = await supabase
-        .from('stock_movements')
-        .insert({
-          product_id: product.id,
-          type: adjustmentType,
-          quantity: finalQuantity,
-          reference_type: adjustmentType === 'adjustment' ? 'adjustment' : adjustmentType === 'in' ? 'stock_in' : 'stock_out',
-          notes: notes || null,
-          created_by: (await supabase.auth.getUser()).data.user?.id
-        });
+      const { error: movementError } = await withTimeout(
+        supabase
+          .from('stock_movements')
+          .insert({
+            product_id: product.id,
+            type: adjustmentType,
+            quantity: finalQuantity,
+            reference_type: adjustmentType === 'adjustment' ? 'adjustment' : adjustmentType === 'in' ? 'stock_in' : 'stock_out',
+            notes: notes || null,
+            created_by: (await withTimeout(supabase.auth.getUser())).data.user?.id
+          })
+      );
 
       if (movementError) throw movementError;
 
@@ -58,13 +61,15 @@ export default function StockAdjustmentModal({ product, onSave, onClose }) {
         newStock = product.current_stock - qty;
       }
 
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ 
-          current_stock: newStock,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', product.id);
+      const { error: updateError } = await withTimeout(
+        supabase
+          .from('products')
+          .update({ 
+            current_stock: newStock,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', product.id)
+      );
 
       if (updateError) throw updateError;
 

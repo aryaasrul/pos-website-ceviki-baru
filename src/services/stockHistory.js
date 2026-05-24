@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { withTimeout } from '../utils/supabaseTimeout';
 
 export const stockHistoryService = {
   /**
@@ -37,7 +38,7 @@ export const stockHistoryService = {
       // Apply pagination
       query = query.range(offset, offset + limit - 1);
 
-      const { data, error, count } = await query;
+      const { data, error, count } = await withTimeout(query);
 
       if (error) throw error;
 
@@ -63,8 +64,10 @@ export const stockHistoryService = {
    */
   async getStockSummary(productId) {
     try {
-      const { data, error } = await supabase
-        .rpc('get_stock_summary', { p_product_id: productId });
+      const { data, error } = await withTimeout(
+        supabase
+          .rpc('get_stock_summary', { p_product_id: productId })
+      );
 
       if (error) throw error;
 

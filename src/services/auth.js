@@ -1,21 +1,26 @@
 import { supabase } from './supabase'
+import { withTimeout } from '../utils/supabaseTimeout'
 
 export const authService = {
   async login(email, password) {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    })
+    const { data: authData, error: authError } = await withTimeout(
+      supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      })
+    )
 
     if (authError) throw new Error(authError.message)
     if (!authData.user) throw new Error('Login gagal')
 
-    const { data: employee, error: employeeError } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('id', authData.user.id)
-      .eq('active', true)
-      .single()
+    const { data: employee, error: employeeError } = await withTimeout(
+      supabase
+        .from('employees')
+        .select('*')
+        .eq('id', authData.user.id)
+        .eq('active', true)
+        .single()
+    )
 
     if (employeeError || !employee) {
       await supabase.auth.signOut()
@@ -26,21 +31,23 @@ export const authService = {
   },
 
   async logout() {
-    const { error } = await supabase.auth.signOut()
+    const { error } = await withTimeout(supabase.auth.signOut())
     if (error) throw error
   },
 
   async getCurrentUser() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await withTimeout(supabase.auth.getUser())
       if (!user) return null
 
-      const { data: employee } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('id', user.id)
-        .eq('active', true)
-        .single()
+      const { data: employee } = await withTimeout(
+        supabase
+          .from('employees')
+          .select('*')
+          .eq('id', user.id)
+          .eq('active', true)
+          .single()
+      )
 
       if (!employee) return null
 
